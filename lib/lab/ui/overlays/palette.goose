@@ -1,6 +1,7 @@
 namespace lab_ui_overlays_palette;
 import std;
 import gfx;
+import lab.ui.input.shortcuts;
 import lab.ui.command;
 import lab.ui.overlays.modal;
 import lab.ui.view;
@@ -14,10 +15,7 @@ struct Config<A> { base: u64, scroll_id: u64, query: A, choose: A, dismiss: A, m
 struct Result<A> { changed: bool = false, invoked: bool = false, action: A = default<A>() }
 fn hint<A>(command: const lab_ui_command::Command<A>&) -> u8[>..] {
     if command.key.len == 0 { return str(""); }
-    str(if (command.mods & gfx::MOD_CTRL) != 0 { "Ctrl+" } else { "" },
-        if (command.mods & gfx::MOD_ALT) != 0 { "Alt+" } else { "" },
-        if (command.mods & gfx::MOD_SHIFT) != 0 { "Shift+" } else { "" },
-        if (command.mods & gfx::MOD_GUI) != 0 { "Super+" } else { "" }, command.key)
+    lab_ui_input_shortcuts::hint(command.key, command.mods)
 }
 fn bindings<A>(view: lab_ui_view::View<A>&, catalog: const lab_ui_command::Catalog<A>&) {
     assert(catalog.code == lab_ui_command::OK);
@@ -44,10 +42,10 @@ fn show<A>(view: lab_ui_view::View<A>&, state: State&, config: Config<A>, catalo
     let selected = lab_ui_command::current(catalog, state.selection, rows);
     let r = panel(view.screen); let list = list_rect(view.screen); let theme = lab_ui_controls_components::Theme {};
     lab_ui_overlays_modal::at_panel(view, config.base, config.base + 2, r, config.dismiss) {
-        lab_ui_view::shortcut(view, "Escape", 0, config.dismiss); lab_ui_view::shortcut(view, "K", gfx::MOD_CTRL, config.dismiss);
+        lab_ui_view::shortcut(view, "Escape", 0, config.dismiss); lab_ui_view::shortcut(view, "K", lab_ui_input_shortcuts::primary(), config.dismiss);
         for key in ["Up", "Down", "PageUp", "PageDown"] { lab_ui_view::shortcut(view, key, 0, config.choose, true); }
         lab_ui_view::at_label(view, "commands-title", lab_ui_geometry::rect(r.x + 16.0, r.y + 10.0, max(0.0, r.w - 128.0), 24.0), "Commands");
-        lab_ui_view::at_label(view, "commands-toggle", lab_ui_geometry::rect(r.x + max(16.0, r.w - 92.0), r.y + 10.0, 76.0, 24.0), "Ctrl+K", config.meta_font, theme.muted);
+        lab_ui_view::at_label(view, "commands-toggle", lab_ui_geometry::rect(r.x + max(16.0, r.w - 92.0), r.y + 10.0, 76.0, 24.0), lab_ui_input_shortcuts::hint("K", lab_ui_input_shortcuts::primary()), config.meta_font, theme.muted);
         lab_ui_view::record(view, lab_ui_view::Node<A> { name: "commands-query", text: "Search commands…", id: config.base + 2, kind: lab_ui_view::FIELD, action: config.query,
             rect: lab_ui_geometry::rect(r.x + 16.0, r.y + 42.0, max(0.0, r.w - 32.0), 40.0), placed: true });
         lab_ui_view::at_list(view, list, lab_ui_view::ListConfig<A> { id: config.base + 3, scroll_id: config.scroll_id, count: rows.items.len, stride: 48.0,

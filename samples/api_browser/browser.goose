@@ -2,6 +2,7 @@ namespace app_api_browser;
 import std;
 import vec;
 import gfx;
+import lab.ui.input.shortcuts;
 import lab.net.http;
 import api_browser.feed;
 import api_browser.client;
@@ -201,17 +202,17 @@ fn status(app: const App&) -> u8[>..] {
 }
 fn commands(app: App&) -> lab_ui_command::Catalog<Action> {
     var c = lab_ui_command::Catalog<Action> {}; let busy = app.client.busy;
-    assert(lab_ui_command::add(c, 1, "Fetch URL", Action.Fetch, "Fetch records and inspect the original response", "http request network", "Return", gfx::MOD_CTRL, !busy && trim(url(app).text).len > 0, if busy { "A request is already running" } else { "Enter a URL first" }));
+    assert(lab_ui_command::add(c, 1, "Fetch URL", Action.Fetch, "Fetch records and inspect the original response", "http request network", "Return", lab_ui_input_shortcuts::primary(), !busy && trim(url(app).text).len > 0, if busy { "A request is already running" } else { "Enter a URL first" }));
     assert(lab_ui_command::add(c, 2, "Cancel request", Action.Cancel, "Keep the current records and stop the worker", "http network", "", 0, busy && !app.client.cancelling, if app.client.cancelling { "Cancellation in progress" } else { "No request is running" }));
     assert(lab_ui_command::add(c, 3, "Load offline example", Action.Example, "Replace the collection with example records", "demo reset", "", 0, !busy, "A request is running"));
-    assert(lab_ui_command::add(c, 4, "Save snapshot", Action.Save, "Save records, URL, filter and selection", "file disk persist", "S", gfx::MOD_CTRL, !busy && !app.blocked && !app.external && app.path.len > 0 && app.feed.code == app_api_feed::OK,
+    assert(lab_ui_command::add(c, 4, "Save snapshot", Action.Save, "Save records, URL, filter and selection", "file disk persist", "S", lab_ui_input_shortcuts::primary(), !busy && !app.blocked && !app.external && app.path.len > 0 && app.feed.code == app_api_feed::OK,
         if busy { "A request is running" } else if app.path.len == 0 { "No snapshot path configured" } else if app.external { "Review the external snapshot change first" } else if app.blocked { "Check the snapshot file before saving" } else { "No valid collection to save" }));
-    assert(lab_ui_command::add(c, 5, if app.dirty && app.blocked { "Check snapshot file" } else { "Reload snapshot" }, Action.Reload, "Read the saved collection or check a repaired file", "file disk restore", "R", gfx::MOD_CTRL,
+    assert(lab_ui_command::add(c, 5, if app.dirty && app.blocked { "Check snapshot file" } else { "Reload snapshot" }, Action.Reload, "Read the saved collection or check a repaired file", "file disk restore", "R", lab_ui_input_shortcuts::primary(),
         !busy && app.path.len > 0 && (!app.dirty || app.blocked), if busy { "A request is running" } else if app.path.len == 0 { "No snapshot path configured" } else { "Save unsaved records before reloading" }));
-    assert(lab_ui_command::add(c, 6, "Show record", Action.Record, "Return to record details", "tab view collection", "1", gfx::MOD_CTRL, app.show_response, "Already showing record details"));
-    assert(lab_ui_command::add(c, 7, "Show response", Action.Response, "Inspect the original HTTP body", "tab view raw json", "2", gfx::MOD_CTRL, !app.show_response, "Already showing the response"));
-    assert(lab_ui_command::add(c, 8, "Find in response", Action.FindText, "Search the response text", "text search", "F", gfx::MOD_CTRL, app.show_response && app.document.code == lab_ui_views_text::OK, "Open the Response tab first"));
-    assert(lab_ui_command::add(c, 9, "Copy JSON", Action.Export, "Encode the current records to the clipboard", "export collection", "C", gfx::MOD_CTRL | gfx::MOD_SHIFT, !busy && app.feed.code == app_api_feed::OK, if busy { "A request is running" } else { "No valid collection to copy" }));
+    assert(lab_ui_command::add(c, 6, "Show record", Action.Record, "Return to record details", "tab view collection", "1", lab_ui_input_shortcuts::primary(), app.show_response, "Already showing record details"));
+    assert(lab_ui_command::add(c, 7, "Show response", Action.Response, "Inspect the original HTTP body", "tab view raw json", "2", lab_ui_input_shortcuts::primary(), !app.show_response, "Already showing the response"));
+    assert(lab_ui_command::add(c, 8, "Find in response", Action.FindText, "Search the response text", "text search", "F", lab_ui_input_shortcuts::primary(), app.show_response && app.document.code == lab_ui_views_text::OK, "Open the Response tab first"));
+    assert(lab_ui_command::add(c, 9, "Copy JSON", Action.Export, "Encode the current records to the clipboard", "export collection", "C", lab_ui_input_shortcuts::primary() | gfx::MOD_SHIFT, !busy && app.feed.code == app_api_feed::OK, if busy { "A request is running" } else { "No valid collection to copy" }));
     assert(lab_ui_command::add(c, 10, "Copy response", Action.CopyResponse, "Copy the original response bytes", "clipboard http raw", "", 0, app.show_response && app.document.code == lab_ui_views_text::OK, "Open the Response tab first"));
     assert(lab_ui_command::add(c, 11, "Toggle completion", Action.Toggle, "Change the selected record's completion state", "complete active task", "", 0, !busy && app_api_feed::index(app.feed, app.selected) >= 0, if busy { "A request is running" } else { "Select a record first" }));
     assert(lab_ui_command::add(c, 12, "Next search match", Action.TextNext, "Move through response search results", "find text", "F3", 0, app.show_response && app.text.matches.len > 0, "Search the response first"));
@@ -224,7 +225,7 @@ fn build(app: App&, width: f32, height: f32) {
     let selected = app_api_feed::index(app.feed, app.selected);
     lab_ui_view::begin(app.view, width, height);
     let catalog = commands(app); lab_ui_overlays_palette::bindings(app.view, catalog);
-    lab_ui_view::shortcut(app.view, "K", gfx::MOD_CTRL, Action.Commands);
+    lab_ui_view::shortcut(app.view, "K", lab_ui_input_shortcuts::primary(), Action.Commands);
     if app.show_response && app.text.find_open { lab_ui_view::shortcut(app.view, "Escape", 0, Action.TextClose); }
     lab_ui_view::box(app.view, "root", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::grow(), height: lab_ui_layout_engine::grow(), padding: lab_ui_layout_engine::padding(22), gap: 12 }) {
         lab_ui_view::label(app.view, "kicker", "GOOSE   /   API BROWSER", lab_ui_layout_engine::Config { height: lab_ui_layout_engine::fixed(18.0), width: lab_ui_layout_engine::grow() }, 2, theme.muted);

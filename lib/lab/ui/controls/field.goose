@@ -4,6 +4,7 @@ import std;
 import math;
 import vec;
 import gfx;
+import lab.ui.input.shortcuts;
 import lab.text.strings;
 import lab.text.grapheme;
 import lab.ui.render.font;
@@ -97,7 +98,7 @@ fn update(s: State&, input: const lab_ui_input_interaction::State&, id: u64, bou
             var bytes: u8[>..] = []; push_utf8(bytes, e.codepoint); result.changed = replace(s, bytes, limit) || result.changed;
         }
         if e.kind != gfx::EVENT_KEY || !e.down { continue; }
-        let shift = (e.mods & gfx::MOD_SHIFT) != 0; let ctrl = (e.mods & gfx::MOD_CTRL) != 0;
+        let shift = (e.mods & gfx::MOD_SHIFT) != 0; let ctrl = lab_ui_input_shortcuts::command(e.mods);
         if ctrl && e.scancode == gfx::scancode("A") { s.anchor = 0; s.cursor = s.text.len; }
         else if ctrl && (e.scancode == gfx::scancode("C") || e.scancode == gfx::scancode("X")) {
             if first(s) != last(s) { gfx::set_clipboard(s.text[first(s)..last(s)]); }
@@ -114,7 +115,7 @@ fn update(s: State&, input: const lab_ui_input_interaction::State&, id: u64, bou
             result.changed = replace(s, "", limit) || result.changed;
         } else if e.scancode == gfx::scancode("Left") || e.scancode == gfx::scancode("Right") {
             let left = e.scancode == gfx::scancode("Left");
-            s.cursor = if !shift && first(s) != last(s) { if left { first(s) } else { last(s) } }
+            s.cursor = if ctrl && lab_ui_input_shortcuts::macos() { if left { 0 } else { s.text.len } } else if !shift && first(s) != last(s) { if left { first(s) } else { last(s) } }
                        else { if left { lab_text_grapheme::previous(s.text, s.cursor) } else { lab_text_grapheme::next(s.text, s.cursor) } };
             if !shift { s.anchor = s.cursor; }
         } else if e.scancode == gfx::scancode("Home") || e.scancode == gfx::scancode("End") {

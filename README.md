@@ -28,6 +28,9 @@ Reusable Goose code is grouped under `lib/lab`: `text`, `collections`, `json`,
 render, controls, views and overlays. Import paths mirror files:
 `import lab.net.http;` uses namespace `lab_net_http`.
 
+The Workbench sample combines a compact sidebar, file tabs, an editor, project
+search and read-only Git diffs/history. Help includes platform-aware shortcuts.
+
 Application entry points, models and controllers are grouped under
 `samples/workbench`, `api_browser`, `task_inbox` and `component_gallery`.
 Small commands live under `samples/cli`; see the [sample guide](samples/README.md). Native services are grouped under `native/io`, `fs`,
@@ -80,8 +83,8 @@ do not require Python. `--build` and `--configuration` must precede the target.
 
 `io_runner`, `files_cli`, `json_cli`, `git_objects`, `git_history` and `find_files`
 also exercise the same libraries without a UI. Run them without arguments for usage information. `ui_profile`, built with `-DGOOSE_LAB_BUILD_TOOLS=ON`, measures
-scene/cache retention and idle work. The [workbench guide](docs/apps/workbench.md)
-describes the integrated editing, search and Git workflow.
+scene/cache retention and idle work. The [Workbench README](samples/workbench/README.md) describes its screen,
+editing/search/Git workflow and platform shortcuts.
 
 Windows uses installed Segoe UI, Consolas and available Japanese/symbol/emoji
 fallbacks. Linux probes installed DejaVu/Liberation/Noto fonts; macOS uses installed Arial

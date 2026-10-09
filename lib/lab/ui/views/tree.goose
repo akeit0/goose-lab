@@ -8,7 +8,7 @@ import lab.ui.layout.scroll;
 import lab.ui.controls.components;
 struct Config<A> {
     id: u64, scroll_id: u64, row_base: u64, action: A,
-    enabled: bool = true, stride: f32 = 28.0, indent: f32 = 16.0, trailing: f32 = 0.0,
+    enabled: bool = true, blocked: bool = false, stride: f32 = 28.0, indent: f32 = 16.0, trailing: f32 = 0.0,
 }
 struct Changed { changed: bool = false, leaf: i64 = -1 }
 fn at_tree<A,F>(view: lab_ui_view::View<A>&, bounds: lab_ui_geometry::Rect, config: Config<A>,
@@ -16,7 +16,7 @@ fn at_tree<A,F>(view: lab_ui_view::View<A>&, bounds: lab_ui_geometry::Rect, conf
     assert(config.row_base > 0 && config.stride >= 12.0 && config.indent >= 0.0 && config.trailing >= 0.0);
     let theme = lab_ui_controls_components::Theme {};
     lab_ui_view::at_list(view, bounds, lab_ui_view::ListConfig<A> { id: config.id, scroll_id: config.scroll_id, count: rows.items.len,
-        stride: config.stride, selected: lab_collections_tree::current(tree, state, rows), action: config.action, enabled: config.enabled, hierarchical: true, framed: false }) {
+        stride: config.stride, selected: lab_collections_tree::current(tree, state, rows), action: config.action, enabled: config.enabled, blocked: config.blocked, hierarchical: true, framed: false }) {
         let range = lab_ui_layout_scroll::visible(lab_ui_view::scroll_state(view, config.scroll_id), bounds.h, config.stride, rows.items.len);
         for i in range.first..range.end {
             let row = rows.items[i]; let node = tree.nodes[row.node]; let prefix = str("tree-", config.id, "-");

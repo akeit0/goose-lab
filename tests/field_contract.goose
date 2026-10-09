@@ -2,6 +2,7 @@ import std;
 import math;
 import vec;
 import gfx;
+import lab.ui.input.shortcuts;
 import lab.ui.render.font;
 import lab.ui.geometry;
 import lab.ui.render.scene;
@@ -32,11 +33,11 @@ fn text_view_contract(c: lab_ui_render_scene::Canvas&) {
     fn send(e: gfx::Event) { lab_ui_views_text::input(v, c, s, d, source, area, cfg, lab_ui_view::Event<TextAction> { kind: lab_ui_view::INPUT, action: TextAction.Input, source: 1, input: e }); }
     send(key("End")); assert(s.cursor == d.index.rows[0].end);
     send(key("Right")); assert(s.cursor == d.index.rows[1].start); send(key("Left")); assert(s.cursor == d.index.rows[0].end);
-    s.anchor = 0; send(key("Right", gfx::MOD_SHIFT)); send(key("C", gfx::MOD_CTRL));
+    s.anchor = 0; send(key("Right", gfx::MOD_SHIFT)); send(key("C", lab_ui_input_shortcuts::primary()));
     assert(gfx::clipboard() == source[..d.index.rows[1].start]); // Includes the original tab and CRLF.
     let before = s.cursor; send(typed('x')); send(key("Backspace")); assert(s.cursor == before);
-    send(key("A", gfx::MOD_CTRL)); send(key("C", gfx::MOD_CTRL)); assert(gfx::clipboard() == source);
-    send(key("Home", gfx::MOD_CTRL)); send(key("Right")); assert(s.cursor == 1);
+    send(key("A", lab_ui_input_shortcuts::primary())); send(key("C", lab_ui_input_shortcuts::primary())); assert(gfx::clipboard() == source);
+    send(key("Home", lab_ui_input_shortcuts::primary())); send(key("Right")); assert(s.cursor == 1);
     send(key("Down")); assert(s.cursor == d.index.rows[1].start);
     send(key("Down")); let target_line = lab_ui_views_text::line(d, source, 2, font);
     assert(s.preferred > 0.0 && s.cursor == d.index.rows[2].start + lab_ui_controls_field::hit(target_line.points, s.preferred)); // Preferred x survives an empty row.
@@ -91,11 +92,11 @@ fn main() {
     route(input, [key("Backspace")]); lab_ui_controls_field::update(second, input, 2, b, font); assert(second.text.len == 0);
     lab_ui_controls_field::set(second, "café"); route(input, [key("Home"), key("Right", gfx::MOD_SHIFT), typed('C')]);
     lab_ui_controls_field::update(second, input, 2, b, font); assert(second.text == "Café");
-    assert(gfx::set_clipboard("Goose café")); route(input, [key("A", gfx::MOD_CTRL), key("V", gfx::MOD_CTRL)]);
+    assert(gfx::set_clipboard("Goose café")); route(input, [key("A", lab_ui_input_shortcuts::primary()), key("V", lab_ui_input_shortcuts::primary())]);
     lab_ui_controls_field::update(second, input, 2, b, font); assert(second.text == "Goose café");
     let before = second.text; route(input, [typed(0x1F600)]); lab_ui_controls_field::update(second, input, 2, b, font, 1.0, second.text.len + 3);
     assert(second.rejected && second.text == before);
-    assert(gfx::set_clipboard("bad\nline")); route(input, [key("V", gfx::MOD_CTRL)]);
+    assert(gfx::set_clipboard("bad\nline")); route(input, [key("V", lab_ui_input_shortcuts::primary())]);
     lab_ui_controls_field::update(second, input, 2, b, font); assert(second.rejected && second.text == before);
     route(input, [key("Return")]); let result = lab_ui_controls_field::update(second, input, 2, b, font); assert(result.submitted && !lab_ui_input_interaction::clicked(input, 2));
     lab_ui_controls_field::set(second, ""); route(input, [typed('A'), key("Return"), typed('B'), key("Return"), typed('C')]);
@@ -172,7 +173,7 @@ fn emoji_field_contract(c: lab_ui_render_scene::Canvas&) {
     lab_ui_controls_field::set(field,value); input.focused=2;
     route(input,[key("Left"),key("Left",gfx::MOD_SHIFT)]); lab_ui_controls_field::update(field,input,2,rect,font,c.scale);
     assert(field.cursor==value.len-9 && field.anchor==value.len-1);
-    assert(gfx::set_clipboard("😀")); route(input,[key("V",gfx::MOD_CTRL)]); lab_ui_controls_field::update(field,input,2,rect,font,c.scale);
+    assert(gfx::set_clipboard("😀")); route(input,[key("V",lab_ui_input_shortcuts::primary())]); lab_ui_controls_field::update(field,input,2,rect,font,c.scale);
     assert(field.text=="A👍🏽👨‍👩‍👧‍👦😀B"); route(input,[key("Backspace")]); lab_ui_controls_field::update(field,input,2,rect,font,c.scale);
     assert(field.text=="A👍🏽👨‍👩‍👧‍👦B"); route(input,[key("Backspace")]); lab_ui_controls_field::update(field,input,2,rect,font,c.scale);
     assert(field.text=="A👍🏽B");

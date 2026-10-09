@@ -1,6 +1,7 @@
 import std;
 import os;
 import gfx;
+import lab.ui.input.shortcuts;
 import workbench.editor.workspace;
 import workbench.editor.single;
 import lab.document.model;
@@ -27,10 +28,12 @@ fn wait(app: app_editor_workspace::App&) {
 }
 fn key(app: app_editor_workspace::App&, name: const u8[:], mods: i64 = 0) {
     if (mods & gfx::MOD_CTRL) != 0 { gfx::inject_key("Left Ctrl", true); }
+    if (mods & gfx::MOD_GUI) != 0 { assert(gfx::inject_key("Left GUI", true)); }
     if (mods & gfx::MOD_SHIFT) != 0 { gfx::inject_key("Left Shift", true); }
     assert(gfx::inject_key(name, true) && gfx::inject_key(name, false));
     if (mods & gfx::MOD_SHIFT) != 0 { gfx::inject_key("Left Shift", false); }
-    if (mods & gfx::MOD_CTRL) != 0 { gfx::inject_key("Left Ctrl", false); } tick(app);
+    if (mods & gfx::MOD_CTRL) != 0 { gfx::inject_key("Left Ctrl", false); }
+    if (mods & gfx::MOD_GUI) != 0 { assert(gfx::inject_key("Left GUI", false)); } tick(app);
 }
 fn click(app: app_editor_workspace::App&, name: const u8[:]) {
     for node in app.editor.view.nodes {
@@ -65,7 +68,7 @@ fn contract(root: const u8[:], screenshot: const u8[:], scale: f32) {
     tree_click(app, "nested"); wait(app); assert(lab_collections_tree::index(app.explorer.tree, "nested/日本語.txt") >= 0);
     tree_click(app, "a.txt"); tick(app);
     // Same normalized file preserves local contents/history; focus returns to the editor.
-    key(app, "End", gfx::MOD_CTRL); assert(gfx::inject_text("local")); tick(app); let generation = app.editor.file.generation;
+    key(app, "End", lab_ui_input_shortcuts::primary()); assert(gfx::inject_text("local")); tick(app); let generation = app.editor.file.generation;
     tree_click(app, "a.txt"); assert(!app.editor.modal.opened && app.editor.file.generation == generation && lab_document_model::dirty(app.editor.file.document)); tick(app);
     tree_click(app, "nested/日本語.txt"); assert(app.editor.modal.opened); key(app, "Escape"); assert(!app.editor.modal.opened && app.editor.file.path == simple.bytes);
     tree_click(app, "nested/日本語.txt"); click(app, "save-before-open"); wait(app);
@@ -77,8 +80,8 @@ fn contract(root: const u8[:], screenshot: const u8[:], scale: f32) {
     click(app, str("hit-", selected)); wait(app); assert(app.editor.view.input.focused == 7 && lab_document_model::read(app.editor.file.document, lab_document_model::first(app.editor.file.document), lab_document_model::last(app.editor.file.document)) == "needle");
     assert(gfx::screenshot(str(screenshot, "-search.png")));
     // Search navigation inside a dirty active document does not discard edits/Undo.
-    key(app, "End", gfx::MOD_CTRL); assert(gfx::inject_text("!")); tick(app); click(app, str("hit-", selected)); tick(app);
-    assert(!app.editor.modal.opened && lab_document_model::dirty(app.editor.file.document)); key(app, "Z", gfx::MOD_CTRL); assert(!lab_document_model::dirty(app.editor.file.document));
+    key(app, "End", lab_ui_input_shortcuts::primary()); assert(gfx::inject_text("!")); tick(app); click(app, str("hit-", selected)); tick(app);
+    assert(!app.editor.modal.opened && lab_document_model::dirty(app.editor.file.document)); key(app, "Z", lab_ui_input_shortcuts::primary()); assert(!lab_document_model::dirty(app.editor.file.document));
     // Stale offsets never select unrelated bytes, but the file still opens.
     disk_idle(app); assert(write_file_atomic(b, "shifted other needle\n"));
     var other: i64 = -1; for i in app.hits.len { if app.hits[i].path != "a.txt" { other = i; } } assert(other >= 0);
@@ -87,7 +90,7 @@ fn contract(root: const u8[:], screenshot: const u8[:], scale: f32) {
     disk_idle(app); assert(write_file_atomic(b, "external 日本語\n")); disk_wait(app, lab_document_workspace::CHANGED);
     assert(lab_document_model::contents(app.editor.file.document) == "shifted other needle\n"); click(app, "reload"); wait(app); assert(lab_document_model::contents(app.editor.file.document) == "external 日本語\n");
     // A dirty reload asks first. Save-and-switch conflicts keep the original buffer.
-    key(app, "End", gfx::MOD_CTRL); assert(gfx::inject_text("local")); tick(app); disk_idle(app); assert(write_file_atomic(b, "changed again\n")); disk_wait(app, lab_document_workspace::CHANGED);
+    key(app, "End", lab_ui_input_shortcuts::primary()); assert(gfx::inject_text("local")); tick(app); disk_idle(app); assert(write_file_atomic(b, "changed again\n")); disk_wait(app, lab_document_workspace::CHANGED);
     click(app, "reload"); assert(app.editor.modal.opened); assert(gfx::screenshot(str(screenshot, "-reload.png"))); key(app, "Escape"); assert(lab_document_model::dirty(app.editor.file.document));
     click(app, "explorer-tab"); tree_click(app, "a.txt"); click(app, "save-before-open"); wait(app);
     assert(app.editor.file.code == lab_document_file::CONFLICT && lab_document_model::contents(app.editor.file.document) == "external 日本語\nlocal");

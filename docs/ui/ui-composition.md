@@ -119,6 +119,13 @@ to Goose.
   one keyboard focus target, independent of the current row window. Arrows,
   Home/End and Page Up/Down request selection and reveal it through ancestor
   scroll areas. Enter/Space activate the accepted selection.
+  Set `blocked: true` during asynchronous work to suppress row selection,
+  activation and navigation while preserving text colors, selection and existing
+  focus. This also blocks controls declared inside the list and cancels an
+  unfinished click; completion never replays that click. Blocked lists leave the
+  Tab order, while scrolling and other controls remain available. Use
+  `enabled: false` when a list is unavailable and should look disabled.
+  `lab.ui.views.tree::Config` exposes the same two states.
 - `at_button`, `at_label` and `at_decoration` compose positioned controls and
   visuals after layout. Checkbox painting is a reusable component.
 - Field changes, submits and rejected edits carry their declared application
@@ -201,3 +208,20 @@ existing selection-only lists retain their behavior. Shortcut repeat is opt-in.
 Custom page painters can defer overlays until after their content is painted.
 
 See [validation](../validation.md) for ordered actions, focus/capture and clipping checks.
+
+## Compact controls and portable bindings
+
+`button(..., primary, enabled, flat)` and `at_button(..., enabled, checkbox,
+value, flat)` accept a final `flat` flag for tabs and toolbars. This changes
+painting while retaining the normal button's identity, keyboard focus, disabled
+behavior and activation routing. File rows continue using the tree/list protocol.
+`scene.create` accepts an optional final base font size; other applications keep
+the 16 px default.
+
+Use `lab.ui.input.shortcuts::primary()` for application commands. It returns
+`gfx::MOD_GUI` on macOS and `gfx::MOD_CTRL` on Windows/Linux. `command(mods)`
+recognizes the platform key and rejects Alt/another command modifier;
+`hint(key, mods)` formats Command/Ctrl/Option labels for the same bindings.
+Fields, editable text, read-only text and command palettes share this policy.
+Platform-specific navigation, such as Command+arrows, stays in the text views.
+The Workbench's shell, tab paths and Help catalog remain in the sample.

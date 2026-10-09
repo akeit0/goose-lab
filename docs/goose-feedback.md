@@ -18,6 +18,15 @@ workers use typed queues, so two clients of the same protocol would compete for
 messages. The host owns one search client and polls it even when its page is hidden.
 The [workbench sample](apps/workbench.md) demonstrates these conventions.
 
+Tabs expose another consequence of the same value model: an array cannot own
+resizable `Document` elements. The current Workbench keeps a bounded array of
+paths/cursor/scroll records and one document owner. Switching files follows an
+explicit dirty-buffer decision and rereads bytes, so inactive tabs have no Undo
+or unsaved buffer. This bounds resident document memory, but differs from an
+editor with independently resident buffers. Multiple such buffers need a shared
+arena with fixed-size document records, or separately owned stacks; merely
+placing the existing document type in a tab array is not valid Goose v1.
+
 ## Values and worker boundaries
 
 Typed queues and isolated workers fit HTTP requests, Git jobs and search results

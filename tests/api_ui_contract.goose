@@ -1,6 +1,7 @@
 import std;
 import os;
 import gfx;
+import lab.ui.input.shortcuts;
 import lab.net.http;
 import lab.io.cancel;
 import lab.ui.layout.engine;
@@ -57,15 +58,15 @@ fn main() {
     assert(lab_net_http::init() == lab_net_http::OK); assert(gfx::open_headless((1180.0 * scale) as i64, (820.0 * scale) as i64));
     var app = app_api_browser::create(lab_ui_render_font::default_font(), scale, argv[4]); let worker = thread_spawn(app_api_client::worker); tick(app);
     assert(app.feed.items.len == 5);
-    click(app, "search"); modified_key(app, "Left Ctrl", "K");
+    click(app, "search"); modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "K");
     assert(app.palette.modal.opened && app.view.input.focused == 100002);
     assert(gfx::screenshot(str(argv[2], ".commands.png")));
     assert(gfx::inject_text("show response")); tick(app); key(app, "Return");
     assert(app.show_response && app.view.input.focused == 15 && !app.palette.modal.opened);
-    modified_key(app, "Left Ctrl", "K"); assert(gfx::inject_text("record")); tick(app);
+    modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "K"); assert(gfx::inject_text("record")); tick(app);
     key(app, "Down"); key(app, "Up"); key(app, "Return"); assert(!app.show_response && !app.palette.modal.opened);
     // Search text stays in the palette; cancellation restores the original field.
-    click(app, "search"); modified_key(app, "Left Ctrl", "K"); assert(gfx::inject_text("no such command")); tick(app);
+    click(app, "search"); modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "K"); assert(gfx::inject_text("no such command")); tick(app);
     key(app, "Return"); assert(app.palette.modal.opened && app_api_browser::query(app).text.len == 0);
     assert(gfx::screenshot(str(argv[2], ".commands-empty.png")));
     key(app, "Escape"); assert(app.view.input.focused == 4 && !app.palette.modal.opened);
@@ -95,11 +96,11 @@ fn main() {
     assert(gfx::screenshot(str(argv[2], ".multilingual.png")));
     lab_ui_controls_field::set(app_api_browser::query(app), ""); tick(app);
     lab_ui_controls_field::set(app_api_browser::url(app), str(argv[1], "/slow")); tick(app);
-    modified_key(app, "Left Ctrl", "K"); assert(gfx::inject_text("fetch")); tick(app); key(app, "Return"); assert(app.client.busy && !app.palette.modal.opened);
-    modified_key(app, "Left Ctrl", "K"); assert(gfx::inject_text("fetch")); tick(app); key(app, "Return"); assert(app.client.busy && app.palette.modal.opened);
+    modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "K"); assert(gfx::inject_text("fetch")); tick(app); key(app, "Return"); assert(app.client.busy && !app.palette.modal.opened);
+    modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "K"); assert(gfx::inject_text("fetch")); tick(app); key(app, "Return"); assert(app.client.busy && app.palette.modal.opened);
     assert(gfx::screenshot(str(argv[2], ".commands-busy.png")));
     // Ctrl+R belongs to the background and must not restore a disk snapshot.
-    modified_key(app, "Left Ctrl", "R"); assert(app.client.busy && app.palette.modal.opened);
+    modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "R"); assert(app.client.busy && app.palette.modal.opened);
     key(app, "Escape");
     // Input and rendering progress while the worker is waiting for HTTP.
     click(app, "search"); assert(gfx::inject_text("Unicode")); tick(app);
@@ -110,12 +111,12 @@ fn main() {
     // Original HTTP bytes remain available independently of record/local edits.
     click(app, "response-tab"); assert(app.show_response && app.document.code == lab_ui_views_text::OK);
     assert(starts_with(app.response, "{\"items\":") && lab_text_strings::contains_folded(app.response, "café"));
-    click(app, "response-body"); modified_key(app, "Left Ctrl", "A"); modified_key(app, "Left Ctrl", "C");
+    click(app, "response-body"); modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "A"); modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "C");
     assert(gfx::clipboard() == app.response);
-    modified_key(app, "Left Ctrl", "F"); assert(app.text.find_open && app.view.input.focused == 20);
+    modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "F"); assert(app.text.find_open && app.view.input.focused == 20);
     assert(gfx::inject_text("café")); tick(app); assert(app.text.matches.len == 1);
-    key(app, "Escape"); assert(!app.text.find_open); modified_key(app, "Left Ctrl", "C"); assert(gfx::clipboard() == "café");
-    modified_key(app, "Left Ctrl", "F"); modified_key(app, "Left Ctrl", "A");
+    key(app, "Escape"); assert(!app.text.find_open); modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "C"); assert(gfx::clipboard() == "café");
+    modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "F"); modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "A");
     assert(gfx::inject_text("record 40")); tick(app);
     assert(app.text.matches.len == 1 && app.text.horizontal.offset > 0.0);
     assert(gfx::screenshot(str(argv[2], ".response.png"))); key(app, "Escape");
@@ -138,7 +139,7 @@ fn main() {
     assert(gfx::screenshot(argv[2]));
     // Save via actual UI events; Reload cannot discard an unsaved completion edit.
     assert(app.dirty); let edited = copy(app.feed); click(app, "reload"); assert(app.feed == edited && app.dirty);
-    modified_key(app, "Left Ctrl", "K"); assert(gfx::inject_text("save snapshot")); tick(app); key(app, "Return");
+    modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "K"); assert(gfx::inject_text("save snapshot")); tick(app); key(app, "Return");
     assert(!app.palette.modal.opened && !app.dirty && !app.blocked);
     let disk = lab_json_file::load(argv[4], lab_json_file::MAX_BYTES); assert(disk.code == lab_json_file::OK);
     let snapshot = app_api_snapshot::decode(disk.data); assert(snapshot.code == lab_json_file::OK);
@@ -184,7 +185,7 @@ fn main() {
     click(app, "disk-review"); assert(app.disk_dialog.opened && app.view.input.focused == 200005);
     assert(gfx::screenshot(str(argv[2], ".external-review.png")));
     // Background shortcuts cannot save over the file from inside the dialog.
-    modified_key(app, "Left Ctrl", "S"); assert(app.disk_dialog.opened && lab_json_file::load(argv[4]).data == external_bytes);
+    modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "S"); assert(app.disk_dialog.opened && lab_json_file::load(argv[4]).data == external_bytes);
     key(app, "Escape"); assert(!app.disk_dialog.opened && app.external && app.feed == local_records && app.view.input.focused == 32);
     click(app, "disk-review"); click_node(app, "disk-load");
     assert(!app.disk_dialog.opened && !app.external && !app.dirty && app.feed == external_snapshot.feed);
@@ -213,7 +214,7 @@ fn main() {
     fetch(app, argv[1], "/stall");
     let ready = lab_net_http::get(str(argv[1], "/waiting")); assert(ready.status == 200);
     assert(gfx::screenshot(str(argv[2], ".loading.png")));
-    let before = clock_ns(); modified_key(app, "Left Ctrl", "K"); assert(gfx::inject_text("cancel request")); tick(app); key(app, "Return");
+    let before = clock_ns(); modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "K"); assert(gfx::inject_text("cancel request")); tick(app); key(app, "Return");
     assert(!app.palette.modal.opened && app.client.cancelling);
     wait(app); assert(clock_ns() - before < 2000000000);
     assert(app.client.cancelled && app.client.code == lab_net_http::CANCELLED && app.client.token.id == 0);
@@ -232,7 +233,7 @@ fn main() {
     wait(app); gfx::inject_mouse(x, y, gfx::MOUSE_LEFT, false); tick(app);
     assert(!app.client.busy && app.client.serial == serial && !app.client.cancelled);
     // A worker completion rebuilds availability while the palette stays open.
-    fetch(app, argv[1], "/slow"); modified_key(app, "Left Ctrl", "K"); assert(gfx::inject_text("cancel request")); tick(app);
+    fetch(app, argv[1], "/slow"); modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "K"); assert(gfx::inject_text("cancel request")); tick(app);
     let completed_serial = app.client.serial; wait(app);
     assert(app.palette.modal.opened && app.view.input.focused == 100002);
     key(app, "Return"); assert(app.palette.modal.opened && !app.client.busy && app.client.serial == completed_serial);

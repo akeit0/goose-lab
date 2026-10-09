@@ -33,11 +33,11 @@ down HTTP. While loading, Fetch becomes Cancel; cancelling retains the current
 collection and its local changes. HTTPS uses the existing verified HTTP/TLS
 adapter. See [cancellation](../io/cancellation.md) for ownership and latency limits.
 
-Commands/Ctrl+K opens the shared [command palette](../ui/command-palette.md).
+Commands/Ctrl/Cmd+K opens the shared [command palette](../ui/command-palette.md).
 It includes Fetch/Cancel, example data, Save/Reload, tabs, completion and copying.
 Disabled operations remain visible with their reason, including unsaved data
-and an active request. Ctrl+Enter fetches, Ctrl+S saves, Ctrl+R reloads/checks,
-Ctrl+1/2 switches Record/Response and Ctrl+Shift+C copies the encoded collection.
+and an active request. Ctrl/Cmd+Enter fetches, Ctrl/Cmd+S saves, Ctrl/Cmd+R reloads/checks,
+Ctrl/Cmd+1/2 switches Record/Response and Ctrl/Cmd+Shift+C copies the encoded collection.
 The palette owns keyboard/pointer input while open; HTTP completion still updates
 its availability. Escape closes the palette and returns to the previous control.
 
@@ -141,7 +141,7 @@ The **Response** tab uses the shared [read-only text view](../ui/text-view.md). 
 shows the exact HTTP body, including JSON/schema failures and non-2xx bodies.
 Transport failures label any retained bytes as a partial response. Local record
 edits do not rewrite it, and cancellation retains the previous body. Select/copy
-a range, Ctrl+A/C to copy all, drag the horizontal scrollbar, or use Find/Ctrl+F
+a range, Ctrl/Cmd+A/C to copy all, drag the horizontal scrollbar, or use Find/Ctrl/Cmd+F
 and Enter/F3/Shift+F3. Escape closes Find before closing the window.
 
 Original HTTP bodies are session-only. Example and Reload instead show generated

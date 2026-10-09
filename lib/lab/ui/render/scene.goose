@@ -34,9 +34,9 @@ fn add_font(c: Canvas&, path: const u8[:], size: f32, fallback: const u8[:] = la
     c.fonts.push(Asset { font, texture, 0 });
     c.fonts.len - 1
 }
-fn create(path: const u8[:], scale: f32 = 1.0, fallback: const u8[:] = lab_ui_render_font::default_fallback(), emoji: const u8[:] = lab_ui_render_font::default_emoji(), symbols: const u8[:] = lab_ui_render_font::default_symbols()) -> Canvas {
+fn create(path: const u8[:], scale: f32 = 1.0, fallback: const u8[:] = lab_ui_render_font::default_fallback(), emoji: const u8[:] = lab_ui_render_font::default_emoji(), symbols: const u8[:] = lab_ui_render_font::default_symbols(), size: f32 = 16.0) -> Canvas {
     var c = default<Canvas>(); c.scale = scale;
-    if add_font(c, path, 16.0, fallback, emoji, symbols) < 0 { return c; }
+    if add_font(c, path, size, fallback, emoji, symbols) < 0 { return c; }
     let vs = embed_shader("vert", """
         layout(location=0) in vec2 a_corner;
         layout(location=1) in vec2 a_origin;

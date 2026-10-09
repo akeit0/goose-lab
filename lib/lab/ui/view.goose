@@ -42,7 +42,7 @@ struct Node<A> {
     id: u64 = 0, kind: i32 = 0, action: A = default<A>(),
     rect: lab_ui_geometry::Rect = lab_ui_geometry::Rect {}, placement: lab_ui_geometry::Rect = lab_ui_geometry::Rect {}, clip: lab_ui_geometry::Rect = lab_ui_geometry::Rect {},
     offset: float2 = float2 { 0.0, 0.0 }, placed: bool = false,
-    enabled: bool = true, value: bool = false, primary: bool = false,
+    enabled: bool = true, blocked: bool = false, value: bool = false, primary: bool = false, flat: bool = false,
     font: i64 = 0, color: float4 = lab_ui_controls_components::Theme {}.text, centered: bool = false,
     limit: i64 = 240, clear_on_submit: bool = false, accepts_text: bool = false, captures_tab: bool = false, text_tag: u32 = 0,
     scroll_region: i64 = -1, list: i64 = -1, index: i64 = -1, focusable: bool = true,
@@ -51,9 +51,10 @@ struct Node<A> {
 struct Viewport { name: u8[..96] = [], scroll_id: u64 = 0, content_height: f32 = 0.0, layer: u64 = 0 }
 struct ScrollDrag { id: u64 = 0, grab: f32 = 0.0 }
 // Owned, controlled selection: reducers adopt an event index or map it to a domain ID.
+// blocked suppresses input during work while keeping enabled colors and existing focus.
 struct ListConfig<A> {
     id: u64, scroll_id: u64, count: i64, stride: f32,
-    selected: i64 = -1, action: A = default<A>(), enabled: bool = true, hierarchical: bool = false, framed: bool = true, activate_on_click: bool = false,
+    selected: i64 = -1, action: A = default<A>(), enabled: bool = true, blocked: bool = false, hierarchical: bool = false, framed: bool = true, activate_on_click: bool = false,
 }
 struct List<A> { config: ListConfig<A>, region: i64 }
 struct Shortcut<A> { scancode: i32, mods: i32, action: A, layer: u64 = 0, repeat: bool = false }
@@ -143,7 +144,7 @@ fn at_list<A,F>(v: View<A>&, bounds: lab_ui_geometry::Rect, config: ListConfig<A
     let region = v.regions.regions.len;
     v.lists.push(List<A> { config: config, region: region });
     record(v, Node<A> { name: str("list-", config.id), id: config.id, kind: LIST, rect: bounds,
-        placed: true, enabled: config.enabled && config.count > 0 });
+        placed: true, enabled: config.enabled && config.count > 0, blocked: config.blocked });
     at_scroll_viewport(v, bounds, config.scroll_id, config.count * config.stride) { F(); };
 }
 fn list<A,F>(v: View<A>&, name: const u8[:], config: ListConfig<A>) {
@@ -164,12 +165,15 @@ fn record<A>(v: View<A>&, node: Node<A>) {
     var n: Node<A> = copy(node); n.viewport = v.regions.current; n.layer = v.layer; n.placement = n.rect;
     n.list = containing_list(v, n.viewport);
     if n.list >= 0 && n.kind != FIELD && n.kind != LIST { n.focusable = false; }
-    if n.list >= 0 && n.id != 0 { n.enabled = n.enabled && v.lists[n.list].config.enabled; }
+    if n.list >= 0 && n.id != 0 {
+        n.enabled = n.enabled && v.lists[n.list].config.enabled;
+        n.blocked = n.blocked || v.lists[n.list].config.blocked;
+    }
     v.nodes.push(n);
 }
 fn button<A>(v: View<A>&, name: const u8[:], id: u64, action: A, text: const u8[:],
-    config: lab_ui_layout_engine::Config, primary: bool = false, enabled: bool = true) {
-    leaf(v, name, config); record(v, Node<A> { name: name, text: text, id: id, kind: BUTTON, action: action, enabled: enabled, primary: primary });
+    config: lab_ui_layout_engine::Config, primary: bool = false, enabled: bool = true, flat: bool = false) {
+    leaf(v, name, config); record(v, Node<A> { name: name, text: text, id: id, kind: BUTTON, action: action, enabled: enabled, primary: primary, flat: flat });
 }
 fn toggle<A>(v: View<A>&, name: const u8[:], id: u64, action: A, text: const u8[:],
     value: bool, config: lab_ui_layout_engine::Config, enabled: bool = true) {
@@ -201,8 +205,8 @@ fn at_field<A>(v: View<A>&, name: const u8[:], id: u64, action: A, rect: lab_ui_
         rect: rect, placed: true, enabled: enabled, limit: limit, clear_on_submit: clear_on_submit });
 }
 fn at_button<A>(v: View<A>&, name: const u8[:], id: u64, action: A, rect: lab_ui_geometry::Rect,
-    text: const u8[:], enabled: bool = true, checkbox: bool = false, value: bool = false) {
-    assert(v.solved); record(v, Node<A> { name: name, text: text, id: id, kind: if checkbox { CHECKBOX } else { BUTTON }, action: action, rect: rect, placed: true, enabled: enabled, value: value });
+    text: const u8[:], enabled: bool = true, checkbox: bool = false, value: bool = false, flat: bool = false) {
+    assert(v.solved); record(v, Node<A> { name: name, text: text, id: id, kind: if checkbox { CHECKBOX } else { BUTTON }, action: action, rect: rect, placed: true, enabled: enabled, value: value, flat: flat });
 }
 fn at_label<A>(v: View<A>&, name: const u8[:], rect: lab_ui_geometry::Rect, text: const u8[:],
     font: i64 = 0, color: float4 = lab_ui_controls_components::Theme {}.text, centered: bool = false) {
@@ -238,11 +242,12 @@ fn prepare<A>(v: View<A>&) {
     lab_ui_layout_viewport::resolve(v.regions, v.screen);
     lab_ui_input_interaction::begin(v.input);
     for &n in v.nodes {
+        if n.kind == FIELD && n.blocked { field_state(v, n.id).dragging = false; }
         n.rect = if n.placed { n.placement } else { bounds(v, n.name) };
         n.offset = lab_ui_layout_viewport::translation(v.regions, n.viewport);
         n.rect = lab_ui_layout_viewport::place(v.regions, n.viewport, n.rect);
         n.clip = lab_ui_layout_viewport::clip(v.regions, n.viewport);
-        if n.id != 0 && n.layer == v.top_layer { lab_ui_input_interaction::register(v.input, n.id, lab_ui_geometry::intersect(n.rect, n.clip), n.enabled, n.focusable, n.kind != FIELD && n.kind != LIST && n.kind != CUSTOM, n.captures_tab); }
+        if n.id != 0 && n.layer == v.top_layer { lab_ui_input_interaction::register(v.input, n.id, lab_ui_geometry::intersect(n.rect, n.clip), n.enabled, n.focusable, n.kind != FIELD && n.kind != LIST && n.kind != CUSTOM, n.captures_tab, n.blocked); }
     }
     if v.drag.id != 0 && scroll_bar(v, v.drag.id) < 0 { v.drag.id = 0; }
 }
@@ -254,7 +259,7 @@ fn reconcile<A>(v: View<A>&, pointer: float2, focused: bool, scale: f32 = 1.0) {
 fn focus_modal<A>(v: View<A>&) {
     if v.top_layer != 0 && v.input.focused == 0 && v.input.has_focus {
         for hit in v.input.hits {
-            if hit.enabled && hit.focusable && hit.bounds.w > 0.0 && hit.bounds.h > 0.0 {
+            if hit.enabled && !hit.blocked && hit.focusable && hit.bounds.w > 0.0 && hit.bounds.h > 0.0 {
                 if v.input.focused == 0 || hit.id == v.initial_focus { v.input.focused = hit.id; }
                 if hit.id == v.initial_focus { break; }
             }
@@ -359,7 +364,7 @@ fn route<A>(v: View<A>&, c: const lab_ui_render_scene::Canvas&, event: gfx::Even
     if event.kind == gfx::EVENT_MOUSE_BUTTON && event.button == gfx::MOUSE_LEFT && event.down && v.input.has_focus {
         let target = lab_ui_input_interaction::top(v.input, v.input.pointer);
         for node in v.nodes {
-            if node.layer != v.top_layer || target == 0 || node.id != target || node.kind == FIELD { continue; }
+            if node.layer != v.top_layer || target == 0 || node.id != target || node.blocked || node.kind == FIELD { continue; }
             let list = if node.kind == LIST { focused_list(v, node.id) } else { node.list };
             if list < 0 { continue; }
             let config = v.lists[list].config; v.input.focused = config.id;
@@ -374,7 +379,7 @@ fn route<A>(v: View<A>&, c: const lab_ui_render_scene::Canvas&, event: gfx::Even
     }
     for click in v.input.clicks {
         for n in v.nodes {
-            if n.layer != v.top_layer || n.id != click { continue; }
+            if n.layer != v.top_layer || n.blocked || n.id != click { continue; }
             if n.kind == LIST_ITEM {
                 let config = v.lists[n.list].config;
                 if config.activate_on_click { out.push(Event<A> { kind: ACTIVATE, action: config.action, source: config.id, index: n.index, pointer: true }); }
@@ -382,7 +387,7 @@ fn route<A>(v: View<A>&, c: const lab_ui_render_scene::Canvas&, event: gfx::Even
         }
     }
     let list = focused_list(v, v.input.focused);
-    if list >= 0 && event.kind == gfx::EVENT_KEY && event.down && v.input.has_focus {
+    if list >= 0 && !lab_ui_input_interaction::blocked(v.input, v.input.focused) && event.kind == gfx::EVENT_KEY && event.down && v.input.has_focus {
         let description = v.lists[list]; let config = description.config;
         if previous_focus != config.id && event.scancode == gfx::scancode("Tab") {
             let index = max(0, config.selected);
@@ -402,7 +407,7 @@ fn route<A>(v: View<A>&, c: const lab_ui_render_scene::Canvas&, event: gfx::Even
     }
     for n in v.nodes {
         if n.layer != v.top_layer { continue; }
-        if n.kind == CUSTOM && n.enabled {
+        if n.kind == CUSTOM && n.enabled && !n.blocked {
             let pointer_event = event.kind == gfx::EVENT_MOUSE_MOTION || event.kind == gfx::EVENT_MOUSE_BUTTON;
             let releasing = event.kind == gfx::EVENT_MOUSE_BUTTON && event.button == gfx::MOUSE_LEFT && !event.down;
             let target = if releasing && previous_capture != 0 { previous_capture }
@@ -411,7 +416,7 @@ fn route<A>(v: View<A>&, c: const lab_ui_render_scene::Canvas&, event: gfx::Even
                 out.push(Event<A> { kind: INPUT, action: n.action, source: n.id, input: event });
             }
         }
-        if n.kind != FIELD || !n.enabled { continue; }
+        if n.kind != FIELD || !n.enabled || n.blocked { continue; }
         let result = lab_ui_controls_field::update(field_state(v, n.id), v.input, n.id, n.rect, c.fonts[0].font, scale, n.limit, n.clear_on_submit);
         for submission in result.submissions { out.push(Event<A> { kind: SUBMIT, action: n.action, source: n.id, text: submission.text }); }
         if result.changed && !result.submitted { out.push(Event<A> { kind: CHANGE, action: n.action, source: n.id }); }
@@ -445,7 +450,7 @@ fn paint_nodes<A>(v: View<A>&, c: lab_ui_render_scene::Canvas&, overlays: bool, 
     for n in v.nodes {
         if filtered && (n.layer != 0) != overlays { continue; }
         lab_ui_render_scene::push_clip(c, n.clip);
-        if n.kind == BUTTON { lab_ui_controls_components::button(c, v.input, n.id, n.rect, n.text, theme, n.primary, n.enabled); }
+        if n.kind == BUTTON { lab_ui_controls_components::button(c, v.input, n.id, n.rect, n.text, theme, n.primary, n.enabled, n.flat); }
         else if n.kind == TOGGLE {
             lab_ui_render_scene::label(c, 0, lab_ui_geometry::rect(n.rect.x, n.rect.y, n.rect.w - 60.0, n.rect.h), n.text, if n.enabled { theme.text } else { theme.muted });
             lab_ui_controls_components::paint_toggle(c, v.input, n.id, n.rect, n.value, theme, n.enabled);
@@ -522,7 +527,7 @@ fn frame<A,Build,Reduce>(v: View<A>&, c: lab_ui_render_scene::Canvas&, events: c
 }
 fn sync_text_owner<A>(v: View<A>&) {
     var owner: u64=0;
-    if v.input.has_focus { for n in v.nodes { if (n.kind==FIELD || n.accepts_text) && n.enabled && n.layer==v.top_layer && n.id==v.input.focused { owner=n.id; } } }
+    if v.input.has_focus { for n in v.nodes { if (n.kind==FIELD || n.accepts_text) && n.enabled && !n.blocked && n.layer==v.top_layer && n.id==v.input.focused { owner=n.id; } } }
     if owner!=v.text_owner {
         if v.text_owner!=0 { gfx::clear_composition(); } v.input.composing=false; v.input.text_pending=false; v.text_owner=owner;
         for i in v.fields.entries.len { lab_ui_input_composition::clear(v.fields.entries[i].value.composition); }

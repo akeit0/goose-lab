@@ -30,7 +30,7 @@ still requires a working GPU/backend; it is not a software renderer.
 | [Utility contract](../tests/utils_contract.goose) | Piece-tree edits against a flat-string oracle, live-root collection, Unicode boundaries and pure utilities |
 | [HTTP fixture](../tests/http_fixture.py), [native cancellation](../tests/cancel_contract.c) | TLS/redirect/byte limits, cancellation and handle lifetimes |
 | [JSON corpus](../tests/json_corpus.py) | Independent decoding, round trips and malformed/bounded inputs |
-| [Workbench fixture](../tests/workbench_fixture.py) | Edit/save/Git/search navigation, a subdirectory workspace, dirty-close decisions, idle frames and resource ownership |
+| [Workbench fixture](../tests/workbench_fixture.py) | Edit/save/Git/search navigation, tabs/cursor restoration, Help/modal routing, initial Git modes, a subdirectory workspace, dirty-close decisions, idle frames and resource ownership |
 | [Git/file fixture](../tests/git_fixture.py) | Process streams, files/watches, atomic-save conflicts, Git history, search and editor interactions |
 | [UI composition](../tests/view_contract.goose), [text/rendering](../tests/modern_contract.goose) | Ordered actions, focus, clipping, glyph geometry, unchanged GPU frames and cleanup |
 | [API fixture](../tests/api_fixture.py), [task fixture](../tests/task_fixture.py) | Persistence, failed-load/save recovery and asynchronous result adoption |

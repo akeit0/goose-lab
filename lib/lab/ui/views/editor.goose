@@ -4,6 +4,7 @@ import std;
 import math;
 import vec;
 import gfx;
+import lab.ui.input.shortcuts;
 import lab.document.model;
 import lab.text.utf8;
 import lab.collections.state_bank;
@@ -126,7 +127,16 @@ fn input<A>(v: lab_ui_view::View<A>&, c: const lab_ui_render_scene::Canvas&, s: 
     if e.kind == gfx::EVENT_MOUSE_WHEEL && e.x != 0.0 { lab_ui_layout_scroll::consume(s.horizontal, -e.x * 44.0, r.w, s.width + 2.0); return true; }
     if e.kind == gfx::EVENT_TEXT && e.codepoint >= 32 && e.codepoint != 127 && e.codepoint <= 0x10FFFF && !(e.codepoint >= 0xD800 && e.codepoint <= 0xDFFF) { var bytes: u8[>..] = []; push_utf8(bytes, e.codepoint); edit(d, s, bytes, true); reveal(v, c, s, d, area, cfg); return true; }
     if e.kind != gfx::EVENT_KEY || !e.down { return false; }
-    let shift = (e.mods & gfx::MOD_SHIFT) != 0; let ctrl = (e.mods & gfx::MOD_CTRL) != 0;
+    let shift = (e.mods & gfx::MOD_SHIFT) != 0; let ctrl = lab_ui_input_shortcuts::command(e.mods);
+    if ctrl && lab_ui_input_shortcuts::macos() {
+        let span = lab_document_piece_tree::line_span(d.tree, lab_document_piece_tree::line_at(d.tree, d.selection.cursor));
+        var at: i64 = -1;
+        if e.scancode == gfx::scancode("Left") { at = span.start; }
+        else if e.scancode == gfx::scancode("Right") { at = span.end; }
+        else if e.scancode == gfx::scancode("Up") { at = 0; }
+        else if e.scancode == gfx::scancode("Down") { at = lab_document_model::size(d); }
+        if at >= 0 { move(d, at, shift); s.preferred = -1.0; reveal(v, c, s, d, area, cfg); return true; }
+    }
     if ctrl && e.scancode == gfx::scancode("A") { move(d, lab_document_model::size(d), false); d.selection.anchor = 0; return true; }
     if ctrl && (e.scancode == gfx::scancode("C") || e.scancode == gfx::scancode("X")) {
         if lab_document_model::first(d) != lab_document_model::last(d) { let text = lab_document_model::read(d, lab_document_model::first(d), lab_document_model::last(d)); s.copy_failed = !gfx::set_clipboard(text); if !s.copy_failed && e.scancode == gfx::scancode("X") { edit(d, s, ""); reveal(v, c, s, d, area, cfg); } } return true;

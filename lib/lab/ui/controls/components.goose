@@ -12,9 +12,15 @@ struct Theme {
     accent: float4 = float4 { 0.43, 0.40, 0.96, 1.0 },
 }
 fn button(c: lab_ui_render_scene::Canvas&, s: const lab_ui_input_interaction::State&, id: u64, r: lab_ui_geometry::Rect,
-    label: const u8[:], theme: Theme = Theme {}, primary: bool = false, enabled: bool = true) -> bool {
+    label: const u8[:], theme: Theme = Theme {}, primary: bool = false, enabled: bool = true, flat: bool = false) -> bool {
     let hovered = s.hovered == id && enabled;
     let down = s.captured == id && hovered;
+    if flat {
+        if primary || hovered || (s.focused == id && enabled) { lab_ui_render_scene::fill(c, r, if primary { theme.surface } else { theme.border }); }
+        if primary { lab_ui_render_scene::fill(c, lab_ui_geometry::rect(r.x, r.y + r.h - 2.0, r.w, 2.0), theme.accent); }
+        lab_ui_render_scene::label(c, 0, r, label, if enabled { theme.text } else { theme.muted }, true);
+        return enabled && lab_ui_input_interaction::clicked(s, id);
+    }
     var color = if primary { theme.accent } else { theme.surface };
     if hovered { color.x += 0.05; color.y += 0.05; color.z += 0.05; }
     if down { color.x *= 0.85; color.y *= 0.85; color.z *= 0.85; }

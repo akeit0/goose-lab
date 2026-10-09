@@ -4,6 +4,7 @@ import std;
 import math;
 import vec;
 import gfx;
+import lab.ui.input.shortcuts;
 import lab.text.utf8;
 import lab.text.grapheme;
 import lab.text.strings;
@@ -191,11 +192,19 @@ fn input<A>(v: lab_ui_view::View<A>&, c: const lab_ui_render_scene::Canvas&, s: 
         lab_ui_layout_scroll::consume(s.horizontal, -e.x * 44.0, r.w, d.width + 2.0); return true;
     }
     if e.kind != gfx::EVENT_KEY || !e.down { return false; }
-    let shift = (e.mods & gfx::MOD_SHIFT) != 0; let ctrl = (e.mods & gfx::MOD_CTRL) != 0;
+    let shift = (e.mods & gfx::MOD_SHIFT) != 0; let ctrl = lab_ui_input_shortcuts::command(e.mods);
     if ctrl && e.scancode == gfx::scancode("C") { if first(s) != last(s) { s.copy_failed = !gfx::set_clipboard(selected(s, source)); } return true; }
     if ctrl && e.scancode == gfx::scancode("A") { s.anchor = 0; s.cursor = source.len; return true; }
     let row = row_at(d, s.cursor); if row < 0 { return false; }
     let span = d.index.rows[row];
+    if ctrl && lab_ui_input_shortcuts::macos() {
+        var at: i64 = -1;
+        if e.scancode == gfx::scancode("Left") { at = span.start; }
+        else if e.scancode == gfx::scancode("Right") { at = span.end; }
+        else if e.scancode == gfx::scancode("Up") { at = 0; }
+        else if e.scancode == gfx::scancode("Down") { at = source.len; }
+        if at >= 0 { move(s, at, shift); s.preferred = -1.0; reveal(v, c, s, d, source, area, cfg); return true; }
+    }
     if e.scancode == gfx::scancode("Left") || e.scancode == gfx::scancode("Right") {
         let left = e.scancode == gfx::scancode("Left");
         let byte = if !shift && first(s) != last(s) { if left { first(s) } else { last(s) } }
@@ -218,7 +227,7 @@ fn input<A>(v: lab_ui_view::View<A>&, c: const lab_ui_render_scene::Canvas&, s: 
 fn handle<A>(v: lab_ui_view::View<A>&, c: const lab_ui_render_scene::Canvas&, s: State&, d: const Document&, source: const u8[:], area: lab_ui_geometry::Rect, cfg: Config<A>, search: FindConfig<A>, command: Command, event: lab_ui_view::Event<A>) -> bool {
     if command == Command.Input {
         let e = event.input;
-        if e.kind == gfx::EVENT_KEY && e.down && (e.mods & gfx::MOD_CTRL) != 0 && e.scancode == gfx::scancode("F") {
+        if e.kind == gfx::EVENT_KEY && e.down && lab_ui_input_shortcuts::command(e.mods) && e.scancode == gfx::scancode("F") {
             s.find_open = true; v.input.focused = search.field_id; return true;
         }
         if e.kind == gfx::EVENT_KEY && e.down && e.scancode == gfx::scancode("F3") {

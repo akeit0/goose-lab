@@ -1,6 +1,7 @@
 import std;
 import os;
 import gfx;
+import lab.ui.input.shortcuts;
 import lab.ui.render.font;
 import lab.ui.view;
 import lab.ui.controls.field;
@@ -137,7 +138,7 @@ fn main() {
     assert(app_git_viewer::repository_name("/") == "/" && app_git_viewer::repository_name("C:/") == "C:");
     // Shared palette: focus restoration, disabled entries, pointer execution,
     // background shortcut isolation, and a real staged/working refresh.
-    click(app, "search"); modified_key(app, "Left Ctrl", "K");
+    click(app, "search"); modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "K");
     assert(app.palette.modal.opened && app.view.input.focused == 100002);
     assert(gfx::screenshot(str(argv[2], ".commands.png")));
     assert(gfx::inject_text("working")); tick(app); key(app, "Return");
@@ -145,12 +146,12 @@ fn main() {
     assert(node(app, "command-description-2").text == "Already showing the working tree");
     key(app, "F5"); assert(!app.client.busy && app.palette.modal.opened);
     key(app, "Escape"); assert(!app.palette.modal.opened && app.view.input.focused == 4 && app_git_viewer::query(app).text.len == 0);
-    modified_key(app, "Left Ctrl", "K"); assert(gfx::inject_text("staged")); tick(app); key(app, "Return"); wait(app);
+    modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "K"); assert(gfx::inject_text("staged")); tick(app); key(app, "Return"); wait(app);
     assert(app.staged && !app.palette.modal.opened && app.view.top_layer == 0);
-    modified_key(app, "Left Ctrl", "K"); assert(gfx::inject_text("working")); tick(app); click_node(app, "command-2"); wait(app);
+    modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "K"); assert(gfx::inject_text("working")); tick(app); click_node(app, "command-2"); wait(app);
     assert(!app.staged && !app.palette.modal.opened && app.diff.patch.rows.len > 0);
     // Close before executing, so the repository editor receives the next input.
-    modified_key(app, "Left Ctrl", "K"); assert(gfx::inject_text("change repository")); tick(app); key(app, "Return");
+    modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "K"); assert(gfx::inject_text("change repository")); tick(app); key(app, "Return");
     assert(app.editing_repo && app.view.input.focused == 1 && !app.palette.modal.opened);
     click(app, "cancel-repo");
     // Opening/cancelling a draft does not request a different repository.
@@ -200,20 +201,20 @@ fn main() {
     click(app, "copy"); assert(gfx::clipboard() == app.diff.patch.source && app.diff.patch.source.len > 1600);
     assert(gfx::screenshot(argv[2]));
     // Shared text selection, exact source copy and find through platform events.
-    click(app, "code"); modified_key(app, "Left Ctrl", "Home");
+    click(app, "code"); modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "Home");
     modified_key(app, "Left Shift", "Right"); modified_key(app, "Left Shift", "Right");
-    modified_key(app, "Left Ctrl", "C"); assert(gfx::clipboard() == "di");
-    modified_key(app, "Left Ctrl", "A"); modified_key(app, "Left Ctrl", "C"); assert(gfx::clipboard() == app.diff.patch.source);
+    modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "C"); assert(gfx::clipboard() == "di");
+    modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "A"); modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "C"); assert(gfx::clipboard() == app.diff.patch.source);
     // Drag against shared shaped byte positions on the first row.
-    modified_key(app, "Left Ctrl", "Home");
+    modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "Home");
     let text_area = lab_ui_view::bounds(app.view, "code");
     let x = text_area.x + 104.0; let y = text_area.y + app_git_viewer::STRIDE / 2.0;
     let end_x = x + lab_ui_render_font::width(app.canvas.fonts[3].font, "diff");
     gfx::inject_mouse(x * scale, y * scale, gfx::MOUSE_LEFT, true);
     gfx::inject_mouse(end_x * scale, y * scale, 0, false);
     gfx::inject_mouse(end_x * scale, y * scale, gfx::MOUSE_LEFT, false); tick(app);
-    modified_key(app, "Left Ctrl", "C"); assert(gfx::clipboard() == "diff" && !app.text.dragging);
-    modified_key(app, "Left Ctrl", "F"); assert(app.text.find_open && app.view.input.focused == 20);
+    modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "C"); assert(gfx::clipboard() == "diff" && !app.text.dragging);
+    modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "F"); assert(app.text.find_open && app.view.input.focused == 20);
     assert(gfx::inject_text("value")); tick(app); assert(app.text.matches.len >= 2 && app.text.active == 0);
     let found_at = app.text.cursor; key(app, "F3"); assert(app.text.active == 1 && app.text.cursor > found_at);
     modified_key(app, "Left Shift", "F3"); assert(app.text.active == 0 && app.text.cursor == found_at);
@@ -317,8 +318,8 @@ fn search_contract(repo: const u8[:], screenshot: const u8[:], scale: f32) {
     assert(gfx::open_headless((1180.0 * scale) as i64, (820.0 * scale) as i64));
     var app = app_git_viewer::create(repo, lab_ui_render_font::default_font(), lab_ui_render_font::default_mono(), scale); app.live = false;
     let worker = thread_spawn(lab_git_client::worker); app_git_viewer::refresh(app); tick(app); wait(app);
-    assert(gfx::inject_key("Left Ctrl", true) && gfx::inject_key("Left Shift", true));
-    key(app, "F"); assert(gfx::inject_key("Left Shift", false) && gfx::inject_key("Left Ctrl", false)); tick(app);
+    assert(gfx::inject_key((if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), true) && gfx::inject_key("Left Shift", true));
+    key(app, "F"); assert(gfx::inject_key("Left Shift", false) && gfx::inject_key((if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), false)); tick(app);
     assert(app.project_search && app.view.input.focused == 40 && !has_node(app, "search"));
     lab_ui_controls_field::set(app_git_viewer::search_query(app), "needle"); lab_ui_controls_field::set(app_git_viewer::include_query(app), "**/*.txt"); click(app, "run-search");
     var streaming = false; let until = clock_ns() + 10000000000;
@@ -334,7 +335,7 @@ fn search_contract(repo: const u8[:], screenshot: const u8[:], scale: f32) {
     assert(app.hits.len == 2 && app.search_query == "aba" && app.hits[0].path == "readme.txt");
     assert(app.hits[0].start == 18 && app.hits[1].start == 20);
     click_node(app, "hit-1"); wait_search(app); assert(app.text.anchor == 20 && app.text.cursor == 23);
-    app.view.input.focused = 7; modified_key(app, "Left Ctrl", "C"); assert(gfx::clipboard() == "aba");
+    app.view.input.focused = 7; modified_key(app, (if lab_ui_input_shortcuts::macos() { "Left GUI" } else { "Left Ctrl" }), "C"); assert(gfx::clipboard() == "aba");
     lab_ui_controls_field::set(app_git_viewer::include_query(app), "***"); click(app, "run-search"); assert(!app.search.busy && app.notice.len > 0 && app.hits.len == 2);
     lab_ui_controls_field::set(app_git_viewer::include_query(app), "readme.txt"); lab_ui_controls_field::set(app_git_viewer::search_query(app), "needle");
     click(app, "ignore-case"); click(app, "run-search"); wait_search(app); assert(app.hits.len == 3 && app.ignore_case);

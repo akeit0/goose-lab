@@ -2,6 +2,7 @@
 namespace app_editor_single;
 import std;
 import gfx;
+import lab.ui.input.shortcuts;
 import lab.ui.render.font;
 import lab.ui.render.scene;
 import lab.ui.layout.engine;
@@ -20,16 +21,17 @@ import lab.text.strings;
 import lab.ui.overlays.modal;
 import lab.document.close;
 import workbench.navigation;
-enum Action { Input, Save, Undo, Redo, Open, Change, Cancel, Compact, Discard, Keep, Dismiss, Reload, Files, ProjectSearch, RunSearch, CancelSearch, SelectFile, SelectHit, Refresh, CloseSave, CloseDiscard, CloseCancel, WorkbenchEditor, WorkbenchChanges }
+enum Action { Input, Save, Undo, Redo, Open, Change, Cancel, Compact, Discard, Keep, Dismiss, Reload, Files, ProjectSearch, RunSearch, CancelSearch, SelectFile, SelectHit, Refresh, CloseSave, CloseDiscard, CloseCancel, WorkbenchEditor, WorkbenchChanges, Help, HelpClose, SelectTab, CloseTab, NextTab, PreviousTab, TabSave, TabDiscard, TabKeep }
 struct App { canvas: lab_ui_render_scene::Canvas, view: lab_ui_view::View<Action> = lab_ui_view::View<Action> {}, editor: lab_ui_views_editor::State = lab_ui_views_editor::State {},
     workspace: lab_document_workspace::State = lab_document_workspace::State {}, reveal_pending: bool = false, seen_generation: u64 = 0, seen_reveal: u64 = 0,
+    compact: bool = false, searching: bool = false, help: lab_ui_overlays_modal::State = lab_ui_overlays_modal::State {},
     scale: f32 = 1.0, editing_path: bool = false,  modal: lab_ui_overlays_modal::State = lab_ui_overlays_modal::State {},
     closing: lab_document_close::State = lab_document_close::State {}, close_modal: lab_ui_overlays_modal::State = lab_ui_overlays_modal::State {},
     file: lab_document_file::State = lab_document_file::State {} }
-fn config() -> lab_ui_views_text::Config<Action> { lab_ui_views_text::Config<Action> { id: 7, scroll_id: 2, bar_id: 17, action: Action.Input, font: 1, stride: 24.0, gutter: 64.0 } }
-fn create(path: const u8[:], scale: f32 = 1.0) -> App {
+fn config(compact: bool = false) -> lab_ui_views_text::Config<Action> { lab_ui_views_text::Config<Action> { id: 7, scroll_id: 2, bar_id: 17, action: Action.Input, font: 1, stride: if compact { 20.0 } else { 24.0 }, gutter: if compact { 52.0 } else { 64.0 } } }
+fn create(path: const u8[:], scale: f32 = 1.0, compact: bool = false) -> App {
     gfx::defer_close(true);
-    var app = App { canvas: lab_ui_render_scene::create(lab_ui_render_font::default_font(), scale), scale: scale }; assert(lab_ui_render_scene::add_font(app.canvas, lab_ui_render_font::default_mono(), 14.0) == 1);
+    var app = App { canvas: lab_ui_render_scene::create(lab_ui_render_font::default_font(), scale, lab_ui_render_font::default_fallback(), lab_ui_render_font::default_emoji(), lab_ui_render_font::default_symbols(), if compact { 13.0 } else { 16.0 }), scale: scale, compact: compact }; assert(lab_ui_render_scene::add_font(app.canvas, lab_ui_render_font::default_mono(), if compact { 13.0 } else { 14.0 }) == 1);
     app.view.layout = lab_ui_layout_engine::create(app.canvas.fonts[0].font); app.view.defer_overlays = true;
     app.file = lab_document_file::create(); assert(app.file.code == 0); lab_ui_controls_field::set(lab_ui_view::field_state(app.view, 1), path);
     if path.len > 0 { lab_document_file::open(app.file, path); } else { app.editing_path = true; } app.view.input.focused = 7; app
@@ -52,6 +54,7 @@ fn sync_close_modal(app: App&) {
     if !app.closing.prompt && app.close_modal.opened { lab_ui_overlays_modal::close(app.view,app.close_modal); }
 }
 fn request_close(app: App&) {
+    lab_ui_overlays_modal::close(app.view, app.help);
     if app.workspace.prompt { lab_document_workspace::choose(app.workspace,app.file,lab_document_workspace::Choice.Keep); }
     lab_ui_overlays_modal::close(app.view,app.modal);
     lab_document_close::request(app.closing,app.file);
@@ -59,8 +62,9 @@ fn request_close(app: App&) {
 }
 fn basename(path: const u8[:]) -> u8[>..] { var start: i64 = 0; for i in path.len { if path[i] == '/' || path[i] == '\\' { start = i + 1; } } lab_text_strings::display_bytes(path[start..], 260) }
 fn build(app: App&, width: f32, height: f32, project: bool = false, project_name: const u8[:] = []) {
+    if app.compact { build_compact(app, width, height, project_name); return; }
     let theme = lab_ui_controls_components::Theme {}; let busy = lab_document_file::busy(app.file) || app.closing.pending || app.closing.saving || app.closing.ready; let d .= app.file.document;
-    lab_ui_view::begin(app.view, width, height); lab_ui_view::shortcut(app.view, "S", gfx::MOD_CTRL, Action.Save); lab_ui_view::shortcut(app.view, "O", gfx::MOD_CTRL, Action.Change);
+    lab_ui_view::begin(app.view, width, height); lab_ui_view::shortcut(app.view, "S", lab_ui_input_shortcuts::primary(), Action.Save); lab_ui_view::shortcut(app.view, "O", lab_ui_input_shortcuts::primary(), Action.Change);
     lab_ui_view::box(app.view, "root", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::grow(), height: lab_ui_layout_engine::grow(), padding: lab_ui_layout_engine::padding(16), gap: 8 }) {
         if project_name.len > 0 { app_workbench_navigation::header(app.view, project_name, false, Action.WorkbenchEditor, Action.WorkbenchChanges, Action.WorkbenchEditor); }
         lab_ui_view::box(app.view, "header", lab_ui_layout_engine::Config { direction: lab_ui_layout_engine::ROW, width: lab_ui_layout_engine::grow(), height: lab_ui_layout_engine::fixed(32.0), gap: 8 }) {
@@ -95,8 +99,12 @@ fn build(app: App&, width: f32, height: f32, project: bool = false, project_name
             lab_ui_view::button(app.view, "compact", 6, Action.Compact, "Clear undo", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::fixed(104.0), height: lab_ui_layout_engine::grow() }, false, !busy && d.history.len > 0);
         };
     };
-    lab_ui_view::solve(app.view); lab_ui_views_editor::at_view(app.view, app.canvas, app.editor, d, lab_ui_view::bounds(app.view, "code"), config(), !busy);
-    if app.reveal_pending { lab_ui_views_editor::reveal(app.view, app.canvas, app.editor, d, lab_ui_view::bounds(app.view, "code"), config()); app.reveal_pending = false; }
+    lab_ui_view::solve(app.view); lab_ui_views_editor::at_view(app.view, app.canvas, app.editor, d, lab_ui_view::bounds(app.view, "code"), config(app.compact), !busy);
+    if app.reveal_pending { lab_ui_views_editor::reveal(app.view, app.canvas, app.editor, d, lab_ui_view::bounds(app.view, "code"), config(app.compact)); app.reveal_pending = false; }
+    panels(app, width, height);
+}
+fn panels(app: App&, width: f32, height: f32) {
+    let theme = lab_ui_controls_components::Theme {};
     if app.modal.opened {
         let panel = lab_ui_geometry::rect(max(8.0, (width - 500.0) / 2.0), max(8.0, (height - 170.0) / 2.0), min(500.0, width - 16.0), 170.0);
         lab_ui_overlays_modal::at_panel(app.view, 1000, 1002, panel, Action.Dismiss) {
@@ -110,11 +118,12 @@ fn build(app: App&, width: f32, height: f32, project: bool = false, project_name
     }
     if app.close_modal.opened { close_panel(app,width,height); }
 }
+
 fn close_panel(app: App&, width: f32, height: f32) {
     let new_file=!app.file.exists; let h: f32=if new_file { 242.0 } else { 194.0 };
     let panel=lab_ui_geometry::rect(max(8.0,(width-500.0)/2.0),max(8.0,(height-h)/2.0),min(500.0,width-16.0),h);
     lab_ui_overlays_modal::at_panel(app.view,2000,2002,panel,Action.CloseCancel) {
-        lab_ui_view::shortcut(app.view,"Escape",0,Action.CloseCancel); lab_ui_view::shortcut(app.view,"S",gfx::MOD_CTRL,Action.CloseSave);
+        lab_ui_view::shortcut(app.view,"Escape",0,Action.CloseCancel); lab_ui_view::shortcut(app.view,"S",lab_ui_input_shortcuts::primary(),Action.CloseSave);
         lab_ui_view::at_label(app.view,"close-title",lab_ui_geometry::rect(panel.x+16.0,panel.y+14.0,panel.w-32.0,28.0),"Save changes before closing?");
         lab_ui_view::at_label(app.view,"close-detail",lab_ui_geometry::rect(panel.x+16.0,panel.y+50.0,panel.w-32.0,26.0),"Discard closes without saving. Cancel keeps editing.",0,lab_ui_controls_components::Theme {}.muted);
         if new_file { lab_ui_view::at_field(app.view,"close-path",2005,Action.CloseSave,lab_ui_geometry::rect(panel.x+16.0,panel.y+86.0,panel.w-32.0,32.0),"File path…",true,512); }
@@ -132,7 +141,8 @@ fn action(app: App&, event: lab_ui_view::Event<Action>) -> bool {
         lab_document_close::choose(app.closing,app.file,lab_document_close::Choice.Cancel); sync_close_modal(app); return true;
     }
     if app.closing.pending || app.closing.saving || app.closing.ready { return false; }
-    if event.action == Action.Input { if lab_document_file::busy(app.file) { return false; } let before = app.file.document.revision; let changed = lab_ui_views_editor::input(app.view, app.canvas, app.editor, app.file.document, lab_ui_view::bounds(app.view, "code"), config(), event); if app.file.document.revision != before { app.file.notice = []; app.file.code = 0; } return changed; }
+    if app.help.opened { if event.action == Action.HelpClose && (event.kind == lab_ui_view::ACTIVATE || lab_ui_overlays_modal::backdrop(event)) { lab_ui_overlays_modal::close(app.view, app.help); } return true; }
+    if event.action == Action.Input { if lab_document_file::busy(app.file) { return false; } let before = app.file.document.revision; let changed = lab_ui_views_editor::input(app.view, app.canvas, app.editor, app.file.document, lab_ui_view::bounds(app.view, "code"), config(app.compact), event); if app.file.document.revision != before { app.file.notice = []; app.file.code = 0; } return changed; }
     if event.action == Action.Dismiss && (lab_ui_overlays_modal::backdrop(event) || (event.input.kind == gfx::EVENT_KEY && event.input.down && event.input.scancode == gfx::scancode("Escape"))) { lab_document_workspace::choose(app.workspace, app.file, lab_document_workspace::Choice.Keep); lab_ui_overlays_modal::close(app.view, app.modal); return true; }
     if event.kind != lab_ui_view::ACTIVATE && event.kind != lab_ui_view::SUBMIT { return false; }
     if lab_document_file::busy(app.file) { return false; }
@@ -148,21 +158,66 @@ fn action(app: App&, event: lab_ui_view::Event<Action>) -> bool {
         CloseDiscard => { lab_document_close::choose(app.closing,app.file,lab_document_close::Choice.Discard); sync_close_modal(app); },
         CloseCancel => {},
         Save => { if app.workspace.prompt { lab_document_workspace::choose(app.workspace, app.file, lab_document_workspace::Choice.Save); if !app.workspace.prompt { lab_ui_overlays_modal::close(app.view, app.modal); } } else { lab_document_file::save(app.file); } },
-        Undo => { app.editor.code = 0; lab_document_model::undo(app.file.document); lab_ui_views_editor::reveal(app.view, app.canvas, app.editor, app.file.document, lab_ui_view::bounds(app.view, "code"), config()); },
-        Redo => { app.editor.code = 0; lab_document_model::redo(app.file.document); lab_ui_views_editor::reveal(app.view, app.canvas, app.editor, app.file.document, lab_ui_view::bounds(app.view, "code"), config()); },
+        Undo => { app.editor.code = 0; lab_document_model::undo(app.file.document); lab_ui_views_editor::reveal(app.view, app.canvas, app.editor, app.file.document, lab_ui_view::bounds(app.view, "code"), config(app.compact)); },
+        Redo => { app.editor.code = 0; lab_document_model::redo(app.file.document); lab_ui_views_editor::reveal(app.view, app.canvas, app.editor, app.file.document, lab_ui_view::bounds(app.view, "code"), config(app.compact)); },
         Change => { lab_document_model::break_group(app.file.document); app.editing_path = true; lab_ui_controls_field::set(lab_ui_view::field_state(app.view, 1), app.file.path); app.view.input.focused = 1; },
         Cancel => { app.editing_path = false; app.view.input.focused = 7; },
         Open => { if !app.file.exists { if lab_document_file::target(app.file, lab_ui_view::field_state(app.view, 1).text) { app.editing_path = false; app.view.input.focused = 7; lab_document_file::save(app.file); } } else { lab_document_workspace::request(app.workspace, app.file, lab_document_workspace::Intent { path: lab_ui_view::field_state(app.view, 1).text, reload: true }); if app.workspace.prompt { lab_ui_overlays_modal::open(app.view, app.modal, 1002); } } },
         Discard => { lab_ui_overlays_modal::close(app.view, app.modal); lab_document_workspace::choose(app.workspace, app.file, lab_document_workspace::Choice.Discard); },
         Keep => { lab_document_workspace::choose(app.workspace, app.file, lab_document_workspace::Choice.Keep); lab_ui_overlays_modal::close(app.view, app.modal); }, Compact => { if lab_document_model::compact(app.file.document) { app.editor.code = 0; } }, Reload => { lab_document_workspace::request(app.workspace, app.file, lab_document_workspace::Intent { path: app.file.path, reload: true }); if app.workspace.prompt { lab_ui_overlays_modal::open(app.view, app.modal, 1002); } },
-        Input => {}, Dismiss => {}, WorkbenchEditor => {}, WorkbenchChanges => {}, Files => {}, ProjectSearch => {}, RunSearch => {}, CancelSearch => {}, SelectFile => {}, SelectHit => {}, Refresh => {},
+        Help => { lab_ui_overlays_modal::open(app.view, app.help, 930002); }, HelpClose => { lab_ui_overlays_modal::close(app.view, app.help); },
+        SelectTab => {}, CloseTab => {}, NextTab => {}, PreviousTab => {}, TabSave => {}, TabDiscard => {}, TabKeep => {}, Input => {}, Dismiss => {}, WorkbenchEditor => {}, WorkbenchChanges => {}, Files => {}, ProjectSearch => {}, RunSearch => {}, CancelSearch => {}, SelectFile => {}, SelectHit => {}, Refresh => {},
     } true
 }
 fn frame(app: App&) {
     poll(app); let size = gfx::screen_size(); let w = size.x / app.scale; let h = size.y / app.scale; lab_ui_render_scene::begin(app.canvas, w, h);
     fn describe() { build(app, w, h); } fn reduce(event: lab_ui_view::Event<Action>) -> bool { action(app, event) }
     lab_ui_view::frame(app.view, app.canvas, gfx::events(), gfx::mouse_pos(), gfx::focused(), app.scale, describe, reduce);
-    lab_ui_views_editor::paint(app.canvas, app.editor, app.file.document, lab_ui_view::bounds(app.view, "code"), config(), lab_ui_view::scroll_state(app.view, 2).offset, app.view.input.focused == 7);
+    lab_ui_views_editor::paint(app.canvas, app.editor, app.file.document, lab_ui_view::bounds(app.view, "code"), config(app.compact), lab_ui_view::scroll_state(app.view, 2).offset, app.view.input.focused == 7);
     lab_ui_view::paint_overlays(app.view, app.canvas); lab_ui_render_scene::render(app.canvas, lab_ui_controls_components::Theme {}.background);
 }
 fn destroy(app: App&) { lab_ui_views_editor::clear(app.editor); lab_document_workspace::close(app.workspace); lab_document_file::close(app.file); gfx::text_input(false); gfx::defer_close(false); lab_ui_layout_engine::destroy(app.view.layout); lab_ui_render_scene::destroy(app.canvas); }
+
+fn build_compact(app: App&, width: f32, height: f32, project_name: const u8[:]) {
+    let theme = lab_ui_controls_components::Theme {}; let d .= app.file.document;
+    let busy = lab_document_file::busy(app.file) || app.closing.pending || app.closing.saving || app.closing.ready;
+    lab_ui_view::begin(app.view, width, height);
+    let primary = lab_ui_input_shortcuts::primary();
+    lab_ui_view::shortcut(app.view, "S", primary, Action.Save); lab_ui_view::shortcut(app.view, "O", primary, Action.Change);
+    lab_ui_view::shortcut(app.view, "F1", 0, Action.Help);
+    lab_ui_view::shortcut(app.view, "E", primary | gfx::MOD_SHIFT, Action.WorkbenchEditor);
+    lab_ui_view::shortcut(app.view, "G", primary | gfx::MOD_SHIFT, Action.WorkbenchChanges);
+    lab_ui_view::shortcut(app.view, "Tab", gfx::MOD_CTRL, Action.NextTab);
+    lab_ui_view::shortcut(app.view, "Tab", gfx::MOD_CTRL | gfx::MOD_SHIFT, Action.PreviousTab);
+    lab_ui_view::shortcut(app.view, "W", primary, Action.CloseTab);
+    let detail: const u8[:] = if busy { if app.file.phase == lab_document_file::LOADING { "Reading file…" } else { "Saving file…" } } else if app.editor.copy_failed { "Unable to copy selection" } else if app.editor.code == lab_ui_views_editor::LAYOUT_LIMIT { "Line shaping limit reached" } else if app.editor.code != 0 { lab_document_model::message(app.editor.code) } else { lab_document_file::message(app.file) };
+    let status = str("Ln ", lab_document_piece_tree::line_at(d.tree, d.selection.cursor) + 1, "   ", lab_document_model::size(d), " bytes   ", if d.newline == "\r\n" { "CRLF" } else { "LF" }, "   UTF-8", if lab_document_model::dirty(d) { "   Unsaved" } else { "" }, "    ", detail);
+    app_workbench_navigation::shell(app.view, width, project_name, false, app.searching, Action.WorkbenchEditor, Action.WorkbenchChanges, Action.ProjectSearch, Action.Help, "project", status) {
+        lab_ui_view::box(app.view, "editor-tools", lab_ui_layout_engine::Config { direction: lab_ui_layout_engine::ROW, width: lab_ui_layout_engine::grow(), height: lab_ui_layout_engine::fixed(28.0), gap: 2 }) {
+            let name: u8[>..] = if app.file.path.len > 0 { basename(app.file.path) } else { "Untitled" };
+            lab_ui_view::label(app.view, "file-name", name, lab_ui_layout_engine::Config { width: lab_ui_layout_engine::grow(), height: lab_ui_layout_engine::grow() }, 0, theme.muted);
+            lab_ui_view::button(app.view, "change", 3, Action.Change, "Open", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::fixed(48.0), height: lab_ui_layout_engine::grow() }, false, !busy, true);
+            lab_ui_view::button(app.view, "undo", 8, Action.Undo, "Undo", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::fixed(44.0), height: lab_ui_layout_engine::grow() }, false, !busy && d.at > 0, true);
+            lab_ui_view::button(app.view, "redo", 9, Action.Redo, "Redo", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::fixed(44.0), height: lab_ui_layout_engine::grow() }, false, !busy && d.at < d.history.len, true);
+            lab_ui_view::button(app.view, "save", 2, Action.Save, "Save", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::fixed(44.0), height: lab_ui_layout_engine::grow() }, false, !busy && app.file.path.len > 0, true);
+        };
+        if app.editing_path {
+            lab_ui_view::box(app.view, "open-row", lab_ui_layout_engine::Config { direction: lab_ui_layout_engine::ROW, width: lab_ui_layout_engine::grow(), height: lab_ui_layout_engine::fixed(30.0), gap: 4 }) {
+                lab_ui_view::field(app.view, "path-input", 1, Action.Open, "File path…", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::grow(), height: lab_ui_layout_engine::grow() }, !busy, 512);
+                lab_ui_view::button(app.view, "open", 4, Action.Open, "Open", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::fixed(48.0), height: lab_ui_layout_engine::grow() }, false, !busy, true);
+                lab_ui_view::button(app.view, "cancel-path", 5, Action.Cancel, "Cancel", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::fixed(52.0), height: lab_ui_layout_engine::grow() }, false, !busy, true);
+            };
+        }
+        if app.workspace.disk != lab_document_workspace::SAME {
+            lab_ui_view::box(app.view, "disk-row", lab_ui_layout_engine::Config { direction: lab_ui_layout_engine::ROW, width: lab_ui_layout_engine::grow(), height: lab_ui_layout_engine::fixed(28.0) }) {
+                lab_ui_view::label(app.view, "disk-status", lab_document_workspace::message(app.workspace), lab_ui_layout_engine::Config { width: lab_ui_layout_engine::grow(), height: lab_ui_layout_engine::grow() }, 0, theme.muted);
+                lab_ui_view::button(app.view, "reload", 10, Action.Reload, "Reload", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::fixed(60.0), height: lab_ui_layout_engine::grow() }, false, !busy, true);
+            };
+        }
+        lab_ui_view::leaf(app.view, "code", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::grow(), height: lab_ui_layout_engine::grow() });
+    };
+    lab_ui_view::solve(app.view);
+    lab_ui_views_editor::at_view(app.view, app.canvas, app.editor, d, lab_ui_view::bounds(app.view, "code"), config(true), !busy);
+    if app.reveal_pending { lab_ui_views_editor::reveal(app.view, app.canvas, app.editor, d, lab_ui_view::bounds(app.view, "code"), config(true)); app.reveal_pending = false; }
+    panels(app, width, height); app_workbench_navigation::help(app.view, app.help, Action.HelpClose);
+}

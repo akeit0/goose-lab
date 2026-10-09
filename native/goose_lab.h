@@ -8,6 +8,7 @@
 #include "ui/scene/scene_glue.h"
 #endif
 #ifdef GOOSE_LAB_TEXT
+#include "ui/input/shortcuts_glue.h"
 #include "ui/text/text_glue.h"
 #endif
 #ifdef GOOSE_LAB_PROCESS

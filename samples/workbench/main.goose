@@ -29,15 +29,14 @@ fn main() {
     }
     gfx::text_transactions(true);
     assert(if headless { gfx::open_headless(width, height) } else { gfx::open("Goose / Workbench", width, height, gfx::WINDOW_RESIZABLE) });
-    var workspace = app_editor_workspace::create(root, file, scale); var git_view = app_git_viewer::App { canvas: default<lab_ui_render_scene::Canvas>() }; var app = app_workbench::State {};
-    app_workbench::init(app, workspace, git_view); app.changes = git;
-    if mode != 0 { app_git_viewer::refresh(git_view, mode); }
+    var workspace = app_editor_workspace::create(root, file, scale, true); var git_view = app_git_viewer::App { canvas: default<lab_ui_render_scene::Canvas>() }; var app = app_workbench::State {};
+    app_workbench::init(app, workspace, git_view, mode); app.changes = git;
     var drawn: i64 = 0;
     while gfx::frame() { app_workbench::frame(app, workspace, git_view); drawn++; if workspace.editor.closing.ready || drawn == frames { break; } sleep_ms(8); }
     if frames > 0 {
         let until = clock_ns() + 15000000000;
         while app_workbench::busy(app, workspace, git_view) && clock_ns() < until { app_workbench::poll(app, workspace, git_view); sleep_ms(2); }
-        if gfx::frame() { app_workbench::frame(app, workspace, git_view); print("bytes=", lab_document_model::size(workspace.editor.file.document), " files=", git_view.files.items.len, " busy=", app_workbench::busy(app, workspace, git_view), " screenshot=", gfx::screenshot(screenshot)); }
+        if gfx::frame() { app_workbench::frame(app, workspace, git_view); print("bytes=", lab_document_model::size(workspace.editor.file.document), " files=", git_view.files.items.len, " mode=", if git_view.history { "history" } else if git_view.staged { "staged" } else { "working" }, " busy=", app_workbench::busy(app, workspace, git_view), " screenshot=", gfx::screenshot(screenshot)); }
     }
     app_workbench::destroy(app, workspace, git_view); gfx::close();
 }

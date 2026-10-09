@@ -1,12 +1,16 @@
 import std;
 import vec;
 import gfx;
+import lab.ui.input.shortcuts;
 import lab.ui.view;
+import lab.ui.views.tree;
+import lab.collections.tree;
 import lab.ui.layout.engine;
 import lab.ui.render.scene;
 import lab.ui.render.font;
 import lab.ui.geometry;
 import lab.ui.controls.field;
+import lab.ui.controls.components;
 import lab.ui.layout.scroll;
 import lab.ui.overlays.palette;
 import lab.ui.command;
@@ -71,6 +75,7 @@ fn main() {
     palette_contract();
     custom_contract();
     list_contract();
+    busy_tree_contract();
     assert(gfx::misuse_count() == 0); gfx::close();
     print("Shared composition: ordered actions, field identity, focus reconciliation and scale passed");
 }
@@ -189,7 +194,7 @@ fn palette_contract() {
         }
         fn build() {
             lab_ui_view::begin(view, 400.0, 240.0);
-            lab_ui_view::shortcut(view, "F5", 0, PaletteAction.Background); lab_ui_view::shortcut(view, "K", gfx::MOD_CTRL, PaletteAction.Open);
+            lab_ui_view::shortcut(view, "F5", 0, PaletteAction.Background); lab_ui_view::shortcut(view, "K", lab_ui_input_shortcuts::primary(), PaletteAction.Open);
             lab_ui_view::box(view, "page", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::grow(), height: lab_ui_layout_engine::grow() }) {
                 lab_ui_view::button(view, "behind", 1, PaletteAction.Background, "Behind", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::fixed(90.0), height: lab_ui_layout_engine::fixed(32.0) });
                 if field_shown { lab_ui_view::field(view, "behind-field", 2, PaletteAction.Background, "Behind field", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::fixed(160.0), height: lab_ui_layout_engine::fixed(32.0) }); }
@@ -207,7 +212,7 @@ fn palette_contract() {
         fn frame(events: const gfx::Event[:]) {
             lab_ui_render_scene::begin(canvas, 400.0, 240.0); lab_ui_view::frame(view, canvas, events, view.input.pointer * scale, true, scale, build, reduce);
         }
-        var open_key = key("K"); open_key.mods = gfx::MOD_CTRL;
+        var open_key = key("K"); open_key.mods = lab_ui_input_shortcuts::primary();
         view.input.focused = 2; view.input.captured = 1; view.drag.id = 1; lab_ui_view::field_state(view, 2).dragging = true;
         frame([open_key]); assert(palette.modal.opened && view.input.focused == 102 && view.input.captured == 0 && view.drag.id == 0 && !lab_ui_view::field_state(view, 2).dragging);
         var wheel = default<gfx::Event>(); wheel.kind = gfx::EVENT_MOUSE_WHEEL; wheel.y = -3.0;
@@ -235,5 +240,69 @@ fn palette_contract() {
         frame([mouse((area.x + 20.0) * scale, (area.y + 12.0) * scale, true), mouse((area.x + 20.0) * scale, (area.y + 12.0) * scale, false)]);
         assert(!palette.modal.opened && count == 2);
         lab_ui_layout_engine::destroy(view.layout); lab_ui_render_scene::destroy(canvas);
+    }
+}
+
+// A busy tree keeps identical text/selection geometry and focus, but cannot
+// navigate, expand or activate. Input started before/during work never replays.
+fn busy_tree_contract() {
+    for factor in [1.0, 1.25] {
+        let scale = factor as f32;
+        var c = lab_ui_render_scene::create(lab_ui_render_font::default_font(), scale);
+        var v = lab_ui_view::View<Action> { layout: lab_ui_layout_engine::create(c.fonts[0].font) };
+        var tree = lab_collections_tree::Tree {};
+        let folder = lab_collections_tree::add(tree, "src", "src", -1, true);
+        assert(lab_collections_tree::add(tree, "src/main.goose", "main.goose", folder) >= 0);
+        var state = lab_collections_tree::State { current: "src" };
+        var busy = false; var enabled = true; var actions = 0;
+        fn build() {
+            lab_ui_view::begin(v, 400.0, 240.0); lab_ui_view::solve(v);
+            let rows = lab_collections_tree::project(tree, state);
+            lab_ui_views_tree::at_tree(v, lab_ui_geometry::rect(0.0, 0.0, 200.0, 100.0),
+                lab_ui_views_tree::Config<Action> { id: 60, scroll_id: 1, row_base: 100, action: Action.Add, enabled: enabled, blocked: busy, stride: 22.0 }, tree, state, rows) { node, index, r =>
+                // Controls placed within a list inherit its temporary input block.
+                if index == 1 { lab_ui_view::at_button(v, "row-action", 65, Action.Remove, lab_ui_geometry::rect(140.0, r.y, 40.0, r.h), "Run"); }
+                if index == 0 { lab_ui_view::at_field(v, "row-field", 66, Action.Entry, lab_ui_geometry::rect(75.0, r.y, 60.0, r.h), "Entry"); }
+            };
+            lab_ui_view::at_button(v, "outside", 70, Action.Reset, lab_ui_geometry::rect(220.0, 0.0, 80.0, 30.0), "Outside");
+        }
+        fn reduce(event: lab_ui_view::Event<Action>) -> bool {
+            actions++;
+            if event.action == Action.Add { let rows = lab_collections_tree::project(tree, state); lab_ui_views_tree::reduce(tree, state, rows, event); }
+            false
+        }
+        fn frame(events: const gfx::Event[:], x: f32 = 390.0, y: f32 = 230.0) {
+            lab_ui_render_scene::begin(c, 400.0, 240.0);
+            lab_ui_view::frame(v, c, events, float2 { x * scale, y * scale }, true, scale, build, reduce);
+        }
+        lab_ui_controls_field::set(lab_ui_view::field_state(v, 66), "abcdef");
+        v.input.focused = 60; frame([]);
+        var geometry: u8[>..] = bytes_of(c.quads); var batches: u8[>..] = bytes_of(c.batches);
+        busy = true; frame([]);
+        assert(v.input.focused == 60 && geometry == bytes_of(c.quads) && batches == bytes_of(c.batches));
+        frame([key("Down"), key("Right"), key("Left"), key("End"), key("Return"), key("Space")]);
+        frame([mouse(50.0 * scale, 33.0 * scale, true), mouse(50.0 * scale, 33.0 * scale, false)], 50.0, 33.0);
+        frame([mouse(160.0 * scale, 33.0 * scale, true), mouse(160.0 * scale, 33.0 * scale, false)], 160.0, 33.0);
+        assert(actions == 0 && state.current == "src" && state.closed.len == 0 && v.input.focused == 60 && v.input.captured == 0);
+        frame([key("Tab")]); assert(v.input.focused == 70);
+        frame([key("Return")]); assert(actions == 1); // Other controls remain usable.
+        v.input.focused = 60; busy = false;
+        frame([mouse(50.0 * scale, 33.0 * scale, false)]); assert(actions == 1);
+        frame([key("Down")]); assert(actions == 2 && state.current == "src/main.goose");
+        frame([mouse(160.0 * scale, 33.0 * scale, true)], 160.0, 33.0); assert(v.input.captured == 65 && actions == 3);
+        busy = true; frame([]); assert(v.input.captured == 0);
+        busy = false; frame([mouse(160.0 * scale, 33.0 * scale, false)]); assert(actions == 3);
+        frame([key("Home")]); assert(actions == 4 && state.current == "src");
+        frame([mouse(80.0 * scale, 11.0 * scale, true)], 80.0, 11.0);
+        let cursor = lab_ui_view::field_state(v, 66).cursor;
+        busy = true; frame([text(88)]); assert(lab_ui_view::field_state(v, 66).text == "abcdef");
+        busy = false;
+        var motion = default<gfx::Event>(); motion.kind = gfx::EVENT_MOUSE_MOTION; motion.x = 120.0 * scale; motion.y = 11.0 * scale;
+        frame([motion], 120.0, 11.0); assert(lab_ui_view::field_state(v, 66).cursor == cursor && actions == 4);
+        v.input.focused = 60;
+        enabled = false; frame([]); assert(v.input.focused == 0);
+        for node in v.nodes { if node.kind == lab_ui_view::LABEL { assert(node.color == lab_ui_controls_components::Theme {}.muted); } }
+        frame([key("Tab")]); assert(v.input.focused == 70);
+        lab_ui_layout_engine::destroy(v.layout); lab_ui_render_scene::destroy(c);
     }
 }

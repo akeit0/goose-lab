@@ -3,6 +3,7 @@ import std;
 import os;
 import vec;
 import gfx;
+import lab.ui.input.shortcuts;
 import lab.io.cancel;
 import lab.git.repository;
 import lab.git.client;
@@ -31,9 +32,11 @@ import lab.ui.overlays.palette;
 import lab.fs.watch;
 import lab.io.debounce;
 import workbench.navigation;
+import lab.ui.overlays.modal;
 let STRIDE: f32 = 24.0;
-enum Action { None, Refresh, ChangeRepo, OpenRepo, CancelRepo, Working, Staged, Search, SelectFile, Previous, Next, Left, Right, Copy, TextInput, FindText, TextQuery, TextPrevious, TextNext, TextClose, Commands, CommandQuery, CommandChoose, CommandDismiss, AutoRefresh, History, SelectCommit, Older, Newer, Patch, Content, ProjectSearch, RunSearch, CancelSearch, IncludeQuery, IgnoreCase, SelectHit, Editor, Changes, EditFile }
+enum Action { None, Refresh, ChangeRepo, OpenRepo, CancelRepo, Working, Staged, Search, SelectFile, Previous, Next, Left, Right, Copy, TextInput, FindText, TextQuery, TextPrevious, TextNext, TextClose, Commands, CommandQuery, CommandChoose, CommandDismiss, AutoRefresh, History, SelectCommit, Older, Newer, Patch, Content, ProjectSearch, RunSearch, CancelSearch, IncludeQuery, IgnoreCase, SelectHit, Editor, Changes, EditFile, Help, HelpClose, SelectTab, CloseTab, NextTab, PreviousTab }
 struct App {
+    tabs: app_workbench_navigation::Tabs = app_workbench_navigation::Tabs {}, editor_dirty: bool = false, help: lab_ui_overlays_modal::State = lab_ui_overlays_modal::State {},
     mono_font: i64 = 3, attached: bool = false, request_editor: bool = false, request_search: bool = false, request_file: bool = false,
     canvas: lab_ui_render_scene::Canvas, view: lab_ui_view::View<Action> = lab_ui_view::View<Action> {},
     client: lab_git_client::State = lab_git_client::State {}, files: lab_git_repository::Files = lab_git_repository::Files {},
@@ -61,7 +64,7 @@ fn repo_field(app: App&) -> lab_ui_controls_field::State& { lab_ui_view::field_s
 fn search_query(app: App&) -> lab_ui_controls_field::State& { lab_ui_view::field_state(app.view, 40) }
 fn include_query(app: App&) -> lab_ui_controls_field::State& { lab_ui_view::field_state(app.view, 41) }
 fn query(app: App&) -> lab_ui_controls_field::State& { lab_ui_view::field_state(app.view, 4) }
-fn text_config(font: i64 = 3) -> lab_ui_views_text::Config<Action> { lab_ui_views_text::Config<Action> { id: 7, scroll_id: 2, bar_id: 17, action: Action.TextInput, font: font, stride: STRIDE, gutter: 104.0 } }
+fn text_config(font: i64 = 3) -> lab_ui_views_text::Config<Action> { lab_ui_views_text::Config<Action> { id: 7, scroll_id: 2, bar_id: 17, action: Action.TextInput, font: font, stride: if font == 1 { 20.0 } else { STRIDE }, gutter: 104.0 } }
 fn palette_config() -> lab_ui_overlays_palette::Config<Action> { lab_ui_overlays_palette::Config<Action> { base: 100000, scroll_id: 10, query: Action.CommandQuery, choose: Action.CommandChoose, dismiss: Action.CommandDismiss, meta_font: 2 } }
 fn find_config() -> lab_ui_views_text::FindConfig<Action> { lab_ui_views_text::FindConfig<Action> { field_id: 20, previous_id: 21, next_id: 22, close_id: 23, query: Action.TextQuery, previous: Action.TextPrevious, next: Action.TextNext, close: Action.TextClose } }
 fn reset_text(app: App&) {
@@ -339,20 +342,21 @@ fn repository_name(path: const u8[:]) -> u8[>..] {
 fn commands(app: App&) -> lab_ui_command::Catalog<Action> {
     var c = lab_ui_command::Catalog<Action> {}; let refreshing = (app.pending && app.queued.refresh) || (app.client.busy && app.client.refresh);
     assert(lab_ui_command::add(c, 1, "Refresh repository", Action.Refresh, "Read changed files and the current patch", "git reload", "F5", 0, !refreshing, "Repository refresh in progress"));
-    assert(lab_ui_command::add(c, 2, "Show working tree", Action.Working, "Changes against the index", "git unstaged mode", "1", gfx::MOD_CTRL, !refreshing && (app.staged || app.history || app.project_search), if refreshing { "Repository refresh in progress" } else { "Already showing the working tree" }));
-    assert(lab_ui_command::add(c, 3, "Show staged changes", Action.Staged, "Index against HEAD", "git index mode", "2", gfx::MOD_CTRL, !refreshing && (!app.staged || app.history || app.project_search), if refreshing { "Repository refresh in progress" } else { "Already showing staged changes" }));
-    if !app.attached { assert(lab_ui_command::add(c, 4, "Change repository", Action.ChangeRepo, "Enter a different repository directory", "git open folder path", "O", gfx::MOD_CTRL, !refreshing && !app.editing_repo, if refreshing { "Repository refresh in progress" } else { "Repository editor is already open" })); }
-    assert(lab_ui_command::add(c, 5, "Find in patch", Action.FindText, "Search the displayed patch", "text search", "F", gfx::MOD_CTRL, app.diff.patch.source.len > 0, "No patch text to search"));
+    assert(lab_ui_command::add(c, 2, "Show working tree", Action.Working, "Changes against the index", "git unstaged mode", "1", lab_ui_input_shortcuts::primary(), !refreshing && (app.staged || app.history || app.project_search), if refreshing { "Repository refresh in progress" } else { "Already showing the working tree" }));
+    assert(lab_ui_command::add(c, 3, "Show staged changes", Action.Staged, "Index against HEAD", "git index mode", "2", lab_ui_input_shortcuts::primary(), !refreshing && (!app.staged || app.history || app.project_search), if refreshing { "Repository refresh in progress" } else { "Already showing staged changes" }));
+    if !app.attached { assert(lab_ui_command::add(c, 4, "Change repository", Action.ChangeRepo, "Enter a different repository directory", "git open folder path", "O", lab_ui_input_shortcuts::primary(), !refreshing && !app.editing_repo, if refreshing { "Repository refresh in progress" } else { "Repository editor is already open" })); }
+    assert(lab_ui_command::add(c, 5, "Find in patch", Action.FindText, "Search the displayed patch", "text search", "F", lab_ui_input_shortcuts::primary(), app.diff.patch.source.len > 0, "No patch text to search"));
     assert(lab_ui_command::add(c, 6, "Next hunk", Action.Next, "Jump to the next changed section", "diff navigation", "F7", 0, lab_text_diff::next_hunk(app.diff.patch, app.line, 1) >= 0, "No next hunk"));
     assert(lab_ui_command::add(c, 7, "Previous hunk", Action.Previous, "Jump to the previous changed section", "diff navigation", "F7", gfx::MOD_SHIFT, lab_text_diff::next_hunk(app.diff.patch, app.line, -1) >= 0, "No previous hunk"));
-    assert(lab_ui_command::add(c, 8, "Copy patch", Action.Copy, "Copy original patch bytes", "clipboard diff", "C", gfx::MOD_CTRL | gfx::MOD_SHIFT, app.diff.patch.source.len > 0, "No patch text to copy"));
+    assert(lab_ui_command::add(c, 8, "Copy patch", Action.Copy, "Copy original patch bytes", "clipboard diff", "C", lab_ui_input_shortcuts::primary() | gfx::MOD_SHIFT, app.diff.patch.source.len > 0, "No patch text to copy"));
     assert(lab_ui_command::add(c, 9, "Next search match", Action.TextNext, "Move through patch search results", "find text", "F3", 0, app.text.matches.len > 0, "Search the patch first"));
     assert(lab_ui_command::add(c, 10, "Previous search match", Action.TextPrevious, "Move through patch search results", "find text", "F3", gfx::MOD_SHIFT, app.text.matches.len > 0, "Search the patch first"));
     assert(lab_ui_command::add(c, 11, if app.live && app.watch_code == lab_fs_watch::OK { "Pause automatic refresh" } else { "Enable automatic refresh" }, Action.AutoRefresh, "Watch worktree, index and refs for changes", "live files watch", "", 0, !app.project_search, "Automatic refresh resumes in Git views"));
-    assert(lab_ui_command::add(c, 12, "Show commit history", Action.History, "Browse first-parent commits, files and contents", "git log history", "3", gfx::MOD_CTRL, !refreshing && !app.history, "Already showing history or refreshing"));
-    assert(lab_ui_command::add(c, 13, "Find in files", Action.ProjectSearch, "Search current project files and open matching lines", "project search files", "F", gfx::MOD_CTRL | gfx::MOD_SHIFT, !refreshing)); c
+    assert(lab_ui_command::add(c, 12, "Show commit history", Action.History, "Browse first-parent commits, files and contents", "git log history", "3", lab_ui_input_shortcuts::primary(), !refreshing && !app.history, "Already showing history or refreshing"));
+    assert(lab_ui_command::add(c, 13, "Find in files", Action.ProjectSearch, "Search current project files and open matching lines", "project search files", "F", lab_ui_input_shortcuts::primary() | gfx::MOD_SHIFT, !refreshing)); c
 }
 fn build(app: App&, width: f32, height: f32) {
+    if app.attached { build_attached(app, width, height); return; }
     let theme = lab_ui_controls_components::Theme {}; let ids = visible(app); let wide = width >= 900.0;
     let rows = tree_rows(app);
     let refreshing = (app.pending && app.queued.refresh) || (app.client.busy && app.client.refresh);
@@ -367,7 +371,7 @@ fn build(app: App&, width: f32, height: f32) {
         else if app.diff.untracked { str("Untracked · ", details) } else { details[..] };
     lab_ui_view::begin(app.view, width, height);
     let catalog = commands(app); lab_ui_overlays_palette::bindings(app.view, catalog);
-    lab_ui_view::shortcut(app.view, "K", gfx::MOD_CTRL, Action.Commands);
+    lab_ui_view::shortcut(app.view, "K", lab_ui_input_shortcuts::primary(), Action.Commands);
     if app.text.find_open { lab_ui_view::shortcut(app.view, "Escape", 0, Action.TextClose); }
     lab_ui_view::box(app.view, "root", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::grow(), height: lab_ui_layout_engine::grow(), padding: lab_ui_layout_engine::padding(16), gap: 8 }) {
         if app.attached { app_workbench_navigation::header(app.view, repository_name(app.repo), true, Action.Editor, Action.Changes, Action.EditFile, app.selected.len > 0 && !app.loading_commit); }
@@ -451,43 +455,7 @@ fn build(app: App&, width: f32, height: f32) {
         lab_ui_view::label(app.view, "footer", footer, lab_ui_layout_engine::Config { width: lab_ui_layout_engine::grow(), height: lab_ui_layout_engine::fixed(20.0) }, 2, theme.muted);
     };
     lab_ui_view::solve(app.view);
-    let files = lab_ui_view::bounds(app.view, "files"); lab_ui_view::at_decoration(app.view, "files-card", files);
-    let area = lab_ui_geometry::rect(files.x + 8.0, files.y + 8.0, files.w - 16.0, files.h - 16.0);
-    if app.project_search {
-        if app.hits.len == 0 { lab_ui_view::at_label(app.view, "empty-results", lab_ui_geometry::rect(area.x + 8.0, area.y + 10.0, area.w - 16.0, 26.0), if app.search.busy { "Searching…" } else if app.search_result >= 0 { "No matches returned" } else { "Enter text to search current files" }, 2, theme.muted); }
-        lab_ui_view::at_list(app.view, area, lab_ui_view::ListConfig<Action> { id: 44, scroll_id: 4, count: app.hits.len, stride: 48.0, selected: app.hit_index, action: Action.SelectHit, framed: false }) {
-            let range = lab_ui_layout_scroll::visible(lab_ui_view::scroll_state(app.view, 4), area.h, 48.0, app.hits.len);
-            for i in range.first..range.end {
-                let hit = app.hits[i]; let r = lab_ui_geometry::rect(area.x + 4.0, area.y + i * 48.0, max(0.0, area.w - 20.0), 48.0);
-                lab_ui_view::at_list_item(app.view, str("hit-", i), 70000 + i as u64, i, r);
-                lab_ui_view::at_label(app.view, str("hit-path-", i), lab_ui_geometry::rect(r.x + 8.0, r.y, r.w - 16.0, 26.0), str(lab_git_repository::display(hit.path, 400), ":", hit.line, ":", hit.column));
-                lab_ui_view::at_label(app.view, str("hit-preview-", i), lab_ui_geometry::rect(r.x + 8.0, r.y + 26.0, r.w - 16.0, 20.0), hit.preview, 2, theme.muted);
-            }
-        };
-    } else {
-    if ids.len == 0 { lab_ui_view::at_label(app.view, "empty-files", lab_ui_geometry::rect(area.x + 8.0, area.y + 10.0, area.w - 16.0, 26.0), "No matching changes", 2, theme.muted); }
-    lab_ui_views_tree::at_tree(app.view, area, lab_ui_views_tree::Config<Action> { id: 6, scroll_id: 1, row_base: 50000, action: Action.SelectFile, enabled: !refreshing && !app.loading_commit, trailing: 24.0 }, app.tree, app.tree_state, rows) { node, index, r =>
-        let item = app.tree.nodes[node];
-        if !item.branch && item.data >= 0 {
-            let file = app.files.items[item.data]; let letter: u8[1] = [file.status];
-            let sw = lab_ui_render_font::width(app.canvas.fonts[0].font, letter);
-            lab_ui_view::at_label(app.view, str("file-status-", index), lab_ui_geometry::rect(r.x + r.w - 12.0 - sw, r.y, sw, r.h), letter, 0, theme.muted);
-        }
-    };
-    }
-    if app.history {
-        let area = lab_ui_view::bounds(app.view, "commits");
-        lab_ui_view::at_list(app.view, area, lab_ui_view::ListConfig<Action> { id: 33, scroll_id: 3, count: app.page.items.len, stride: 48.0, selected: app.commit_index, action: Action.SelectCommit, enabled: !refreshing, framed: false }) {
-            let range = lab_ui_layout_scroll::visible(lab_ui_view::scroll_state(app.view, 3), area.h, 48.0, app.page.items.len);
-            for i in range.first..range.end {
-                let item = app.page.items[i]; let r = lab_ui_geometry::rect(area.x + 4.0, area.y + i * 48.0, max(0.0, area.w - 20.0), 48.0);
-                lab_ui_view::at_list_item(app.view, str("commit-", i), 60000 + i as u64, i, r);
-                let subject: u8[>..] = if item.subject.len > 0 { lab_git_repository::display(item.subject) } else { "(No subject)" };
-                lab_ui_view::at_label(app.view, str("commit-subject-", i), lab_ui_geometry::rect(r.x + 12.0, r.y, r.w - 24.0, 26.0), subject);
-                lab_ui_view::at_label(app.view, str("commit-meta-", i), lab_ui_geometry::rect(r.x + 12.0, r.y + 26.0, r.w - 24.0, 20.0), str(item.id[..8], " · ", lab_text_strings::display_bytes(item.author, 120), " · ", item.date, if item.parents > 1 { " · merge" } else { "" }), 2, theme.muted);
-            }
-        };
-    }
+    describe_lists(app, refreshing, ids, rows);
     lab_ui_views_text::at_view(app.view, lab_ui_view::bounds(app.view, "code"), text_config(app.mono_font), app.text, app.document);
     lab_ui_overlays_palette::show(app.view, app.palette, palette_config(), catalog);
 }
@@ -518,6 +486,10 @@ fn text_command(a: Action) -> lab_ui_views_text::Command, bool {
     }
 }
 fn action(app: App&, event: lab_ui_view::Event<Action>) -> bool {
+    if app.help.opened {
+        if event.action == Action.HelpClose && (event.kind == lab_ui_view::ACTIVATE || lab_ui_overlays_modal::backdrop(event)) { lab_ui_overlays_modal::close(app.view, app.help); } return true;
+    }
+    if event.action == Action.Help && event.kind == lab_ui_view::ACTIVATE { lab_ui_overlays_modal::open(app.view, app.help, 930002); return true; }
     if event.action == Action.Commands && event.kind == lab_ui_view::ACTIVATE { lab_ui_overlays_palette::open(app.view, app.palette, palette_config()); return true; }
     if event.action == Action.CommandQuery || event.action == Action.CommandChoose || event.action == Action.CommandDismiss {
         let catalog = commands(app); let result = lab_ui_overlays_palette::reduce(app.view, app.palette, palette_config(), catalog, event);
@@ -584,7 +556,7 @@ fn apply_action(app: App&, event: lab_ui_view::Event<Action>) -> bool {
         Left => { app.text.horizontal.offset = max(0.0, app.text.horizontal.offset - 160.0); }, Right => { app.text.horizontal.offset += 160.0; },
         Copy => { app.text.copy_failed = false; app.notice = if gfx::set_clipboard(app.diff.patch.source) { if app.shown_content { "File copied · Original bytes preserved" } else { "Patch copied · Original bytes preserved" } } else { "Unable to copy the patch · Try again" }; },
         Commands => {}, CommandQuery => {}, CommandChoose => {}, CommandDismiss => {},
-        None => {}, Search => {}, SelectFile => {}, TextInput => {}, FindText => {}, TextQuery => {}, TextPrevious => {}, TextNext => {}, TextClose => {},
+        Help => {}, HelpClose => {}, SelectTab => {}, CloseTab => {}, NextTab => {}, PreviousTab => {}, None => {}, Search => {}, SelectFile => {}, TextInput => {}, FindText => {}, TextQuery => {}, TextPrevious => {}, TextNext => {}, TextClose => {},
     } true
 }
 fn frame(app: App&) {
@@ -594,4 +566,96 @@ fn frame(app: App&) {
     fn reduce(event: lab_ui_view::Event<Action>) -> bool { action(app, event) }
     lab_ui_view::frame(app.view, app.canvas, gfx::events(), gfx::mouse_pos(), gfx::focused(), app.scale, describe, reduce);
     paint_code(app); lab_ui_view::paint_overlays(app.view, app.canvas); lab_ui_render_scene::render(app.canvas, lab_ui_controls_components::Theme {}.background);
+}
+
+fn describe_lists(app: App&, refreshing: bool, ids: const i64[:], rows: const lab_collections_tree::Rows&) {
+    let theme = lab_ui_controls_components::Theme {};
+    let files = lab_ui_view::bounds(app.view, "files"); if !app.attached { lab_ui_view::at_decoration(app.view, "files-card", files); }
+    let area = lab_ui_geometry::rect(files.x + 8.0, files.y + 8.0, files.w - 16.0, files.h - 16.0);
+    if app.project_search {
+        if app.hits.len == 0 { lab_ui_view::at_label(app.view, "empty-results", lab_ui_geometry::rect(area.x + 8.0, area.y + 10.0, area.w - 16.0, 26.0), if app.search.busy { "Searching…" } else if app.search_result >= 0 { "No matches returned" } else { "Enter text to search current files" }, 2, theme.muted); }
+        lab_ui_view::at_list(app.view, area, lab_ui_view::ListConfig<Action> { id: 44, scroll_id: 4, count: app.hits.len, stride: 48.0, selected: app.hit_index, action: Action.SelectHit, framed: false }) {
+            let range = lab_ui_layout_scroll::visible(lab_ui_view::scroll_state(app.view, 4), area.h, 48.0, app.hits.len);
+            for i in range.first..range.end {
+                let hit = app.hits[i]; let r = lab_ui_geometry::rect(area.x + 4.0, area.y + i * 48.0, max(0.0, area.w - 20.0), 48.0);
+                lab_ui_view::at_list_item(app.view, str("hit-", i), 70000 + i as u64, i, r);
+                lab_ui_view::at_label(app.view, str("hit-path-", i), lab_ui_geometry::rect(r.x + 8.0, r.y, r.w - 16.0, 26.0), str(lab_git_repository::display(hit.path, 400), ":", hit.line, ":", hit.column));
+                lab_ui_view::at_label(app.view, str("hit-preview-", i), lab_ui_geometry::rect(r.x + 8.0, r.y + 26.0, r.w - 16.0, 20.0), hit.preview, 2, theme.muted);
+            }
+        };
+    } else {
+    if ids.len == 0 { lab_ui_view::at_label(app.view, "empty-files", lab_ui_geometry::rect(area.x + 8.0, area.y + 10.0, area.w - 16.0, 26.0), "No matching changes", 2, theme.muted); }
+    lab_ui_views_tree::at_tree(app.view, area, lab_ui_views_tree::Config<Action> { id: 6, scroll_id: 1, row_base: 50000, action: Action.SelectFile, blocked: refreshing || app.loading_commit, stride: if app.attached { 22.0 } else { 28.0 }, trailing: 24.0 }, app.tree, app.tree_state, rows) { node, index, r =>
+        let item = app.tree.nodes[node];
+        if !item.branch && item.data >= 0 {
+            let file = app.files.items[item.data]; let letter: u8[1] = [file.status];
+            let sw = lab_ui_render_font::width(app.canvas.fonts[0].font, letter);
+            lab_ui_view::at_label(app.view, str("file-status-", index), lab_ui_geometry::rect(r.x + r.w - 12.0 - sw, r.y, sw, r.h), letter, 0, theme.muted);
+        }
+    };
+    }
+    if app.history {
+        let area = lab_ui_view::bounds(app.view, "commits");
+        lab_ui_view::at_list(app.view, area, lab_ui_view::ListConfig<Action> { id: 33, scroll_id: 3, count: app.page.items.len, stride: 48.0, selected: app.commit_index, action: Action.SelectCommit, blocked: refreshing, framed: false }) {
+            let range = lab_ui_layout_scroll::visible(lab_ui_view::scroll_state(app.view, 3), area.h, 48.0, app.page.items.len);
+            for i in range.first..range.end {
+                let item = app.page.items[i]; let r = lab_ui_geometry::rect(area.x + 4.0, area.y + i * 48.0, max(0.0, area.w - 20.0), 48.0);
+                lab_ui_view::at_list_item(app.view, str("commit-", i), 60000 + i as u64, i, r);
+                let subject: u8[>..] = if item.subject.len > 0 { lab_git_repository::display(item.subject) } else { "(No subject)" };
+                lab_ui_view::at_label(app.view, str("commit-subject-", i), lab_ui_geometry::rect(r.x + 12.0, r.y, r.w - 24.0, 26.0), subject);
+                lab_ui_view::at_label(app.view, str("commit-meta-", i), lab_ui_geometry::rect(r.x + 12.0, r.y + 26.0, r.w - 24.0, 20.0), str(item.id[..8], " · ", lab_text_strings::display_bytes(item.author, 120), " · ", item.date, if item.parents > 1 { " · merge" } else { "" }), 2, theme.muted);
+            }
+        };
+    }
+}
+
+fn build_attached(app: App&, width: f32, height: f32) {
+    let theme = lab_ui_controls_components::Theme {}; let ids = visible(app); let rows = tree_rows(app); let patch .= app.diff.patch;
+    let refreshing = (app.pending && app.queued.refresh) || (app.client.busy && app.client.refresh);
+    lab_ui_view::begin(app.view, width, height); let catalog = commands(app); lab_ui_overlays_palette::bindings(app.view, catalog);
+    let primary = lab_ui_input_shortcuts::primary();
+    lab_ui_view::shortcut(app.view, "K", primary, Action.Commands); lab_ui_view::shortcut(app.view, "F1", 0, Action.Help);
+    lab_ui_view::shortcut(app.view, "E", primary | gfx::MOD_SHIFT, Action.Editor);
+    lab_ui_view::shortcut(app.view, "G", primary | gfx::MOD_SHIFT, Action.Changes);
+    lab_ui_view::shortcut(app.view, "Tab", gfx::MOD_CTRL, Action.NextTab); lab_ui_view::shortcut(app.view, "Tab", gfx::MOD_CTRL | gfx::MOD_SHIFT, Action.PreviousTab);
+    lab_ui_view::shortcut(app.view, "W", primary, Action.CloseTab);
+    if app.text.find_open { lab_ui_view::shortcut(app.view, "Escape", 0, Action.TextClose); }
+    let status = str(ids.len, " files   ", if app.history { "History · First parent" } else if app.staged { "Staged · Index against HEAD" } else { "Working tree · Against index" }, "   ", if refreshing { "Refreshing changes…" } else if app.loading_commit { "Reading commit files…" } else if app.client.busy || app.pending { "Reading file…" } else if app.notice.len > 0 { app.notice[..] } else if app.diff.code != 0 { app.diff.error[..] } else { "" });
+    app_workbench_navigation::shell(app.view, width, repository_name(app.repo), true, false, Action.Editor, Action.Changes, Action.ProjectSearch, Action.Help, "git-sidebar", status, app.history) {
+        lab_ui_view::box(app.view, "navigation", lab_ui_layout_engine::Config { direction: lab_ui_layout_engine::ROW, width: lab_ui_layout_engine::grow(), height: lab_ui_layout_engine::fixed(28.0), gap: 2 }) {
+            lab_ui_view::label(app.view, "summary", str("+", patch.added, "  −", patch.removed), lab_ui_layout_engine::Config { width: lab_ui_layout_engine::grow(), height: lab_ui_layout_engine::grow() }, 0, theme.muted);
+            lab_ui_view::button(app.view, "workbench-open-file", 900003, Action.EditFile, "Edit file", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::fixed(64.0), height: lab_ui_layout_engine::grow() }, false, app.selected.len > 0 && !app.loading_commit, true);
+            if app.history {
+                lab_ui_view::button(app.view, "patch-mode", 36, Action.Patch, "Diff", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::fixed(42.0), height: lab_ui_layout_engine::grow() }, !app.content, !app.loading_commit, true);
+                let chosen = lab_git_repository::index(app.files, app.selected);
+                lab_ui_view::button(app.view, "content-mode", 37, Action.Content, "At commit", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::fixed(66.0), height: lab_ui_layout_engine::grow() }, app.content, !app.loading_commit && chosen >= 0 && app.files.items[chosen].status != 'D', true);
+            }
+            lab_ui_view::button(app.view, "previous", 8, Action.Previous, "Prev", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::fixed(40.0), height: lab_ui_layout_engine::grow() }, false, lab_text_diff::next_hunk(patch, app.line, -1) >= 0, true);
+            lab_ui_view::button(app.view, "next", 9, Action.Next, "Next", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::fixed(40.0), height: lab_ui_layout_engine::grow() }, false, lab_text_diff::next_hunk(patch, app.line, 1) >= 0, true);
+            lab_ui_view::button(app.view, "find", 18, Action.FindText, "Find", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::fixed(40.0), height: lab_ui_layout_engine::grow() }, false, patch.source.len > 0, true);
+        };
+        lab_ui_views_text::find_bar(app.view, app.text, "text-find", find_config());
+        lab_ui_view::leaf(app.view, "code", lab_ui_layout_engine::Config { width: lab_ui_layout_engine::grow(), height: lab_ui_layout_engine::grow() });
+    };
+    lab_ui_view::solve(app.view);
+    let panel = lab_ui_view::bounds(app.view, "git-tools"); let x = panel.x + 8.0; let w = panel.w - 16.0;
+    lab_ui_view::at_label(app.view, "sidebar-title", lab_ui_geometry::rect(x + 4.0, panel.y, w - 66.0, 28.0), if panel.w >= 240.0 { "SOURCE CONTROL" } else { "GIT" }, 0, theme.muted);
+    lab_ui_view::at_button(app.view, "refresh", 2, Action.Refresh, lab_ui_geometry::rect(x + w - 60.0, panel.y, 60.0, 28.0), "Refresh", !refreshing, false, false, true);
+    for i in 3 {
+        let action = if i == 0 { Action.Working } else if i == 1 { Action.Staged } else { Action.History };
+        lab_ui_view::record(app.view, lab_ui_view::Node<Action> { name: if i == 0 { "working" } else if i == 1 { "staged" } else { "history" }, text: if i == 0 { "Changes" } else if i == 1 { "Staged" } else { "History" }, id: if i == 0 { 3 } else if i == 1 { 5 } else { 32 }, kind: lab_ui_view::BUTTON, action: action, rect: lab_ui_geometry::rect(x + i * w / 3.0, panel.y + 28.0, w / 3.0, 28.0), placed: true, primary: if i == 0 { !app.staged && !app.history } else if i == 1 { app.staged && !app.history } else { app.history }, enabled: !refreshing, flat: true });
+    }
+    lab_ui_view::at_field(app.view, "search", 4, Action.Search, lab_ui_geometry::rect(x, panel.y + 62.0, w, 26.0), "Filter files…", !refreshing);
+    if app.history {
+        let area = lab_ui_view::bounds(app.view, "history-tools");
+        lab_ui_view::at_label(app.view, "history-caption", lab_ui_geometry::rect(area.x + 12.0, area.y, area.w - 100.0, 26.0), "COMMITS", 0, theme.muted);
+        lab_ui_view::at_button(app.view, "newer", 34, Action.Newer, lab_ui_geometry::rect(area.x + area.w - 100.0, area.y, 48.0, 26.0), "Newer", !refreshing && app.page.offset > 0, false, false, true);
+        lab_ui_view::at_button(app.view, "older", 35, Action.Older, lab_ui_geometry::rect(area.x + area.w - 52.0, area.y, 48.0, 26.0), "Older", !refreshing && app.page.more, false, false, true);
+    }
+    describe_lists(app, refreshing, ids, rows);
+    let revision: u8[>..] = if app.shown_commit.len > 0 { str(" @", app.shown_commit[..8]) } else { "" };
+    let name: u8[>..] = str(if app.shown.len > 0 { app.shown[..] } else { "Diff" }, revision, if app.shown_content { " · File" } else { " · Diff" });
+    app_workbench_navigation::tabs(app.view, app.tabs, Action.SelectTab, Action.CloseTab, app.editor_dirty, true, name, Action.Changes, Action.PreviousTab, Action.NextTab);
+    lab_ui_views_text::at_view(app.view, lab_ui_view::bounds(app.view, "code"), text_config(app.mono_font), app.text, app.document);
+    lab_ui_overlays_palette::show(app.view, app.palette, palette_config(), catalog); app_workbench_navigation::help(app.view, app.help, Action.HelpClose);
 }
