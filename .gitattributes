@@ -1,0 +1,18 @@
+* text=auto
+*.goose text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.py text eol=lf
+*.cmake text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.ps1 text eol=lf
+LICENSE text eol=lf
+NOTICE text eol=lf
+samples/data/*.txt text eol=lf
+
+.gitattributes text eol=lf
+.gitignore text eol=lf
+.gitmodules text eol=lf
+tools/unicode/*.txt text eol=lf
+tools/unicode/GraphemeBreakTest.txt whitespace=-blank-at-eol

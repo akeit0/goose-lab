@@ -1,0 +1,9 @@
+/build*/
+__pycache__/
+*.png
+/task-inbox.gxt
+
+/api-browser.json
+
+/local/
+/CMakeUserPresets.json

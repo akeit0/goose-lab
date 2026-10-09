@@ -1,0 +1,17 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {"major": 3, "minor": 21, "patch": 0},
+  "configurePresets": [
+    {"name": "base", "hidden": true, "binaryDir": "${sourceDir}/build/${presetName}", "cacheVariables": {"CMAKE_BUILD_TYPE": "Release"}},
+    {"name": "gui", "inherits": "base", "displayName": "Libraries and native UI", "cacheVariables": {"GOOSE_LAB_GUI": "ON"}},
+    {"name": "core", "inherits": "base", "displayName": "Libraries without GUI", "cacheVariables": {"GOOSE_LAB_GUI": "OFF"}}
+  ],
+  "buildPresets": [
+    {"name": "gui", "configurePreset": "gui", "configuration": "Release"},
+    {"name": "core", "configurePreset": "core", "configuration": "Release"}
+  ],
+  "testPresets": [
+    {"name": "gui", "configurePreset": "gui", "configuration": "Release", "output": {"outputOnFailure": true}},
+    {"name": "core", "configurePreset": "core", "configuration": "Release", "output": {"outputOnFailure": true}}
+  ]
+}

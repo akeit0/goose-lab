@@ -1,0 +1,6 @@
+add_subdirectory(io)
+add_subdirectory(fs)
+add_subdirectory(net)
+if(GOOSE_LAB_GUI)
+  add_subdirectory(ui)
+endif()

@@ -1,0 +1,7 @@
+Color emoji / 日本語
+
+Smile 😀  Skin tone 👍🏽  Family 👨‍👩‍👧‍👦  Flag 🇯🇵
+Text presentation ❤︎  Emoji presentation ❤️  Keycap 1️⃣
+
+Select, move the caret, Backspace, Undo, paste, or enter text with IME.
+Each composed emoji is one editing unit; stored content stays UTF-8.
