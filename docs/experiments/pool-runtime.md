@@ -43,7 +43,8 @@ dirty state/diffs, compiler/program/source hashes, copied sources, C flags and
 environment, exact commands, contracts, diagnostic logs, raw CSV and operation
 percentiles/totals. Local measurements belong under ignored `local/` or builds.
 The trace's pessimistic sum of requested capacities is limited to 128 MiB to
-stay below the selected default 256 MiB runtime reservation; this is a finite
+stay below the current 2 GiB runtime reservation (the historical revisions below
+reserved 256 MiB); this is a finite
 test envelope, not a recoverable-allocation API. Custom smaller reservation builds
 need a correspondingly smaller envelope.
 

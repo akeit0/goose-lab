@@ -4,16 +4,32 @@ Goose is maintained outside this repository. `GOOSE_SOURCE_DIR` must explicitly
 name a compatible source checkout; a sibling directory or personal home path is
 never inferred. Initialize its SDL submodule for GUI builds.
 
-Use [akeit0/goose, branch lab-toolchain](https://github.com/akeit0/goose/tree/lab-toolchain),
-revision `a6e8543a1017724d8da784585927264f9e324aa2`. This revision is published.
-The fork's [capability guide](https://github.com/akeit0/goose/blob/a6e8543a1017724d8da784585927264f9e324aa2/docs/fork.md)
-describes its separate feature commits and checks.
+Routine validation uses one upstream-tracking compatible checkout of
+[akeit0/goose, branch lab-toolchain](https://github.com/akeit0/goose/tree/lab-toolchain).
+The validated local revision is `77653e48f3e3db0853f439014ce58e80df3de41d`,
+which merges upstream `2ec9b38bde93cda87ee374157b0353722b2d5f8e` and includes
+the independent compiler correction `b08994e` for implicit inline returns.
+Windows/MSVC Release passed the 23 main checks, five pool/storage checks and
+15 focused return executions at Goose `-O0/-O1/-O2`.
+
+The synchronization and correction are local commits and have not been pushed.
+Fresh remote clones still receive the published base
+`a6e8543a1017724d8da784585927264f9e324aa2`; they do not reproduce the current
+qualification until these commits are available. The fork's
+[published capability guide](https://github.com/akeit0/goose/blob/a6e8543a1017724d8da784585927264f9e324aa2/docs/fork.md)
+describes its integration extensions.
+
+Select the validated local checkout explicitly:
 
 ```text
-git clone --branch lab-toolchain --recurse-submodules git@github.com:akeit0/goose.git /path/to/goose
-git -C /path/to/goose checkout a6e8543a1017724d8da784585927264f9e324aa2
+git -C /path/to/goose rev-parse HEAD
 cmake -S . -B build -DGOOSE_SOURCE_DIR=/path/to/goose
 ```
+
+Merge upstream before qualifying the next baseline and review the remaining fork
+delta for effects on the experiment. Keep its compiler, stdlib and native libraries
+together. Run a second upstream checkout only for a focused reproduction of a
+relevant difference; repeating identical suites on two checkouts is not routine work.
 
 ## Required capabilities
 

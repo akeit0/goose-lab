@@ -84,6 +84,24 @@ the [pool contract experiment](pool-runtime.md).
 
 ## Interpretation for Goose
 
+On Windows/MSVC Release, lab `ead001f` and the clean compatible fork
+`77653e48f3e3db0853f439014ce58e80df3de41d` completed the default 54 processes
+on one toolchain: 3/16/64 buffers, uniform/mixed/churn, both policies and three
+repeats. Every row passed the independent oracle and payload/lifetime assertions.
+The ignored record is `local/references/buffer-storage/current-fork-run/results.json`.
+
+For 64 mixed buffers, both policies retained 3,145,728 bytes of payload/capacity:
+
+| Policy | Pool high-water bytes | Inferred moved capacity bytes | Peak metadata slots | Address visits for 4,096 reads |
+| --- | ---: | ---: | ---: | ---: |
+| Geometric | 3,244,032 | 3,088,384 | 0 | 4,096 |
+| 4,096-byte linked chunks | 3,145,728 | 0 | 768 | 26,219 |
+
+With closing and reopening, chunk metadata still peaked at 768 slots, while
+address visits grew to 47,437 for 8,192 reads; geometric addressing used 8,192
+visits and inferred relocation reached 3,719,168 bytes. These deterministic
+counters establish the copying/addressing tradeoff, not a platform speed ranking.
+
 Compare copying, capacity and high-water with metadata and addressing together.
 Smaller chunks can reduce unused capacity while increasing allocator calls,
 descriptors, cleanup work and linked-list traversal. Larger chunks reverse that
