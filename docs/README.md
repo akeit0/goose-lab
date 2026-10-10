@@ -30,6 +30,8 @@ The [library map](libraries.md) lists imports and native targets;
 - [Validation](validation.md) and [third-party notices](../THIRD_PARTY.md).
 - [Independent document experiments](experiments/independent-documents.md): headless
   slice-pool ownership, correctness and reproducible time/storage comparisons.
+- [Goose pool runtime experiments](experiments/pool-runtime.md): the same minimal
+  source on upstream/fork, growth policies, stale views and a compiler diagnostic.
 
 Library guides describe current APIs, ownership, errors and limits. Application
 guides describe complete workflows and their domain-specific rules. Put shared

@@ -4,6 +4,12 @@ The supported validation configuration is Windows x64, MSVC Release with the
 compatible Goose fork described in [toolchain requirements](toolchain.md).
 Other platforms have not been validated.
 
+The separate [pool runtime experiment](experiments/pool-runtime.md) builds a
+standard-module-only probe against an explicitly selected upstream or fork
+checkout. Its four checks cover pool semantics, a recorded compiler diagnostic,
+isolated reservation exhaustion and the measurement runner; they are separate
+from the main configuration below.
+
 ```text
 cmake -S . -B build -DGOOSE_SOURCE_DIR=/path/to/compatible/goose
 cmake --build build --config Release --parallel
