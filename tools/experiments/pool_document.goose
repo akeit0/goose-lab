@@ -13,7 +13,7 @@ struct Document { generation: u64 = 0, open: bool = false, next_revision: u64 = 
 struct Range { start: i64, end: i64 }
 struct Stats { documents: i64 = 0, current: i64 = 0, saved: i64 = 0, undo: i64 = 0,
     used: i64 = 0, high_water: i64 = 0, free: i64 = 0, largest_free: i64 = 0,
-    copied: i64 = 0, zeroed: i64 = 0, allocations: i64 = 0 }
+    copied: i64 = 0, zeroed: i64 = 0, allocations: i64 = 0, preflight_scans: i64 = 0 }
 // One registry per worker. Public operations expose owned bytes and generation IDs,
 // never a raw pool slice, document reference or pool name.
 reusable[] var storage: u8[>..] = [];
@@ -22,6 +22,7 @@ var limits = Limits {};
 var copied: i64 = 0;
 var zeroed: i64 = 0;
 var allocations: i64 = 0;
+var preflight_scans: i64 = 0;
 fn valid(id: Id) -> bool { id.slot >= 0 && id.slot < documents.len && documents[id.slot].open && documents[id.slot].generation == id.generation }
 fn ranges() -> Range[>..] {
     var result: Range[>..] = [];
@@ -31,7 +32,7 @@ fn ranges() -> Range[>..] {
     sort(result, less); result
 }
 fn stats() -> Stats {
-    var s = Stats { high_water: storage.len, copied: copied, zeroed: zeroed, allocations: allocations };
+    var s = Stats { high_water: storage.len, copied: copied, zeroed: zeroed, allocations: allocations, preflight_scans: preflight_scans };
     for d in documents {
         if !d.open { continue; } s.documents++; s.saved += d.saved.text.len;
         s.current += d.versions[d.at].text.len;
@@ -45,7 +46,12 @@ fn stats() -> Stats {
 // Predict first-fit placement including a free tail. Check the high-water budget
 // before calling the runtime allocator, whose reservation failure is fatal.
 fn fits(count: i64, copies: i64 = 1) -> bool {
-    if count < 0 { return false; } if count == 0 { return true; }
+    if count < 0 || copies < 1 { return false; } if count == 0 { return true; }
+    // Appending every requested run fits even if no freed space is usable.
+    // Avoid walking/sorting retained versions unless the budget is under pressure.
+    // Division keeps this bound safe without multiplying user-sized counts.
+    if count <= (limits.pool - storage.len) / copies { return true; }
+    preflight_scans++;
     var end: i64 = 0; var remaining = copies; let spans = ranges();
     for r in spans { remaining -= min(remaining, (r.start - end) / count); if remaining == 0 { return true; } end = r.end; }
     count * remaining <= limits.pool - end

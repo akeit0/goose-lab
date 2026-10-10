@@ -6,7 +6,7 @@ import lab.document.model;
 import lab.document.piece_tree;
 fn row(operation: const u8[:], elapsed: i64, s: experiment_pool_document::Stats) {
     print(operation, ",", elapsed, ",", s.documents, ",", s.current, ",", s.saved, ",", s.undo, ",", s.used, ",", s.high_water,
-        ",", s.free, ",", s.largest_free, ",", s.copied, ",", s.zeroed, ",", s.allocations);
+        ",", s.free, ",", s.largest_free, ",", s.copied, ",", s.zeroed, ",", s.allocations, ",", s.preflight_scans);
 }
 fn measure(operation: const u8[:], before: i64) { let elapsed = clock_ns() - before; row(operation, elapsed, experiment_pool_document::stats()); }
 fn source(length: i64, shape: const u8[:]) -> u8[>..] {
@@ -37,7 +37,7 @@ fn tree_row(operation: const u8[:], elapsed: i64, d: const lab_document_model::D
     // Roots share bytes: store counts physical text, not the sum of snapshots.
     // Pool/copy/zero counters are unavailable for this existing implementation.
     print(operation, ",", elapsed, ",1,", lab_document_model::size(d), ",", lab_document_piece_tree::size(d.tree, d.saved_root),
-        ",,", d.tree.arena.len * 8, ",,,,,,");
+        ",,", d.tree.arena.len * 8, ",,,,,,,");
 }
 fn tree(size: i64, iterations: i64, shape: const u8[:]) {
     let initial = source(size, shape); let before = clock_ns(); var d = lab_document_model::create(initial); assert(d.code == 0); tree_row("open", clock_ns() - before, d);
@@ -54,7 +54,7 @@ fn main() {
     let count, count_ok = parse_int(argv[2]); let size, size_ok = parse_int(argv[3]); let iterations, iterations_ok = parse_int(argv[4]);
     assert(count_ok && count >= 1 && count <= 64 && size_ok && size >= 1 && size <= 2097152 && iterations_ok && iterations >= 1 && iterations <= 10000);
     assert(argv[5] == "lines" || argv[5] == "long-line" || argv[5] == "unicode");
-    print("operation,elapsed_ns,documents,current_bytes,saved_bytes,undo_bytes,used_bytes,pool_high_water_bytes,pool_free_bytes,largest_free_run_bytes,copied_bytes,zeroed_bytes,allocations");
+    print("operation,elapsed_ns,documents,current_bytes,saved_bytes,undo_bytes,used_bytes,pool_high_water_bytes,pool_free_bytes,largest_free_run_bytes,copied_bytes,zeroed_bytes,allocations,preflight_scans");
     if argv[1] == "snapshot" { pooled(count, size, iterations, argv[5]); }
     else { assert(argv[1] == "piece-tree" && count == 1); tree(size, iterations, argv[5]); }
 }

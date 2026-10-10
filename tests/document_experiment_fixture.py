@@ -15,6 +15,7 @@ def main():
         subprocess.run(command, check=True, timeout=30)
         record = json.loads((output / "results.json").read_text(encoding="utf-8"))
         assert record["complete"] and len(record["cases"]) == 9
+        assert record["schema_version"] == 2
         assert len(record["lab"]["revision"]) == 40 and len(record["toolchain"]["revision"]) == 40
         assert all(len(value) == 64 for value in record["source_sha256"].values())
         assert record["contract"]["exit_code"] == 0
@@ -23,6 +24,7 @@ def main():
             assert case["exit_code"] == 0 and case["memory_sample_count"] >= 0
             assert record["timing_summary"][case["name"]]["edit"]["samples"] == case["documents"] * 4
             if case["mode"] == "snapshot":
+                assert case["final"]["preflight_scans"] == 0
                 assert case["final"]["used_bytes"] == 0
                 assert case["final"]["pool_free_bytes"] == case["final"]["pool_high_water_bytes"]
         # An earlier measurement directory cannot be replaced accidentally.

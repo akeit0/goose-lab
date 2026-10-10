@@ -26,7 +26,7 @@ CASES = {
 }
 FIELDS = ["operation", "elapsed_ns", "documents", "current_bytes", "saved_bytes",
           "undo_bytes", "used_bytes", "pool_high_water_bytes", "pool_free_bytes",
-          "largest_free_run_bytes", "copied_bytes", "zeroed_bytes", "allocations"]
+          "largest_free_run_bytes", "copied_bytes", "zeroed_bytes", "allocations", "preflight_scans"]
 
 
 def digest(path):
@@ -160,7 +160,7 @@ def main():
     (output / "lab.diff.patch").write_text(git(ROOT, "diff", "HEAD", "--no-ext-diff") + "\n", encoding="utf-8")
     (output / "toolchain.diff.patch").write_text(git(toolchain, "diff", "HEAD", "--no-ext-diff") + "\n", encoding="utf-8")
     record = {
-        "schema_version": 1, "started_utc": datetime.now(timezone.utc).isoformat(),
+        "schema_version": 2, "started_utc": datetime.now(timezone.utc).isoformat(),
         "hypothesis": "Slice pools can isolate resident documents, history and saved state; full snapshots make small edits copy whole texts.",
         "comparison": "Contiguous immutable snapshots vs the existing single-document persistent piece tree (one-document cases only).",
         "proposal_target": "goose-lab representation first; runtime allocation/observability only if measured costs remain.",

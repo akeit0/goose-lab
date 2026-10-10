@@ -86,6 +86,15 @@ fn limits_and_boundaries() {
     assert(experiment_pool_document::stats().high_water == before.high_water);
     text(p, "0123456789012345"); text(r, "0123456789012345");
     experiment_pool_document::close_all();
+    assert(experiment_pool_document::stats().preflight_scans > 0);
+    // With sufficient append headroom, no live-range scan is necessary.
+    assert(experiment_pool_document::configure(experiment_pool_document::Limits {}));
+    let scans = experiment_pool_document::stats().preflight_scans;
+    let fast, fc = experiment_pool_document::open("headroom"); assert(fc == 0);
+    assert(experiment_pool_document::replace(fast, 0, 1, "H") == 0);
+    assert(experiment_pool_document::mark_saved(fast, experiment_pool_document::revision(fast)) == 0);
+    assert(experiment_pool_document::stats().preflight_scans == scans);
+    experiment_pool_document::close_all();
 }
 fn churn(count: i64) {
     assert(experiment_pool_document::configure(experiment_pool_document::Limits {}));

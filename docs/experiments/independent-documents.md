@@ -72,11 +72,13 @@ at most 32 rounds when equal history length matters. `INVALID`, `LIMIT` and
 `STALE` are separate results. Editing boundaries follow the existing UTF-8/CRLF
 rules; grapheme navigation remains the caller's responsibility.
 
-Before allocation, the baseline sorts all live byte ranges and simulates first-fit
+Before allocation, the baseline checks whether appending every requested run
+fits inside the remaining high-water budget. When it does, no live-range scan
+is needed. Otherwise it sorts all live byte ranges and simulates first-fit
 placement, including the reusable tail. Two allocations for opening can occupy
 different gaps. This enforces the high-water budget before the runtime allocator,
-whose exhaustion is not recoverable. It deliberately charges an O(retained
-versions log retained versions) library preflight to each edit/save/open. Sorting
+whose exhaustion is not recoverable. Only allocations under budget pressure pay
+the O(retained versions log retained versions) library preflight. Sorting
 temporary ranges and descriptor storage are outside the byte-pool budget.
 This budget does not promise that unrelated process/native allocations cannot fail.
 
@@ -116,7 +118,10 @@ to the OS are different outcomes.
 `copied_bytes` counts pool payload writes, including inserts and baseline copies;
 `zeroed_bytes` counts the logical bytes initialized by `alloc_slice`. Neither
 counts runtime allocator bookkeeping, fixed descriptors, exported owned copies
-or measurement output. Piece Tree `used_bytes` counts its node/text arena words;
+or measurement output. `preflight_scans` counts capacity checks that need the
+sorted live-range fallback; observation through `stats` is excluded. Schema 2
+adds this counter to the manifest/CSV. Piece Tree `used_bytes` counts its node/text
+arena words;
 it excludes inline history and temporary collectors. Missing pool/copy counters
 are blank, not zero. These measures answer different questions and are not a
 total-memory comparison. Operation timing ends before stats/CSV output; whole-run
@@ -125,8 +130,8 @@ so short processes may have missing samples, and sampled peaks can miss spikes.
 Runtime reservation/commit counters are not available in this experiment.
 
 Full snapshots make even a one-byte edit copy the complete new text. The growing
-range-preflight cost is a library implementation choice, not proof that Goose's
-runtime pool itself scales poorly. The next representation comparisons should
+range-preflight cost under budget pressure is a library implementation choice,
+not proof that Goose's runtime pool itself scales poorly. The next representation comparisons should
 be chunked storage and a pooled Piece Tree, using this same correctness oracle
 and reporting which costs each removes. Only measured remaining problems justify
 runtime allocation/observability or language proposals. No upstream change is

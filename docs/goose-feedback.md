@@ -32,7 +32,8 @@ uses existing `reusable[]` slice pools and fixed descriptors for 3/16/64 residen
 buffers, independent Undo/saved state and generation-checked IDs. It is a headless
 full-snapshot baseline, separate from Workbench's Piece Tree. The measurement
 runner separates owned text/history, reusable/high-water storage and copy work;
-its capacity preflight also has a library-level range-sorting cost. Compare
+its capacity preflight sorts live ranges only when append headroom cannot cover
+the request, with a separate counter for that fallback. Compare
 chunked and pooled-tree representations before attributing these costs to a
 missing move facility or requesting independent dynamic stacks. Pool reuse
 does not itself release committed memory to the OS.
