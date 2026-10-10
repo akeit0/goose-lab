@@ -86,6 +86,10 @@ also exercise the same libraries without a UI. Run them without arguments for us
 scene/cache retention and idle work. The [Workbench README](samples/workbench/README.md) describes its screen,
 editing/search/Git workflow and platform shortcuts.
 
+With manual tools enabled, `document_profile` and `tools/document_experiment.py`
+provide [GUI-free independent-document experiments](docs/experiments/independent-documents.md),
+including 3/16/64 resident buffers and recorded snapshot/Piece Tree comparisons.
+
 Windows uses installed Segoe UI, Consolas and available Japanese/symbol/emoji
 fallbacks. Linux probes installed DejaVu/Liberation/Noto fonts; macOS uses installed Arial
 and Menlo. Set `GOOSE_LAB_FONT_PATH` and `GOOSE_LAB_MONO_PATH` if lookup fails.

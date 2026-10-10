@@ -14,8 +14,9 @@ cmake --build build-core --config Release --parallel
 ctest --test-dir build-core -C Release --output-on-failure
 ```
 
-With samples and tests enabled, the GUI configuration registers 22 checks and
-the GUI-free configuration registers 9. Tests use loopback HTTP/TLS fixtures,
+With samples and tests enabled, the GUI configuration registers 23 checks and
+the GUI-free configuration registers 10. Enabling manual tools adds the
+`document_experiment_smoke` check. Tests use loopback HTTP/TLS fixtures,
 temporary Git repositories and temporary files. Python fixtures do not contact
 public services. The checked-in TLS key is only a localhost test fixture.
 
@@ -28,6 +29,7 @@ still requires a working GPU/backend; it is not a software renderer.
 | Check sources | Main coverage |
 | --- | --- |
 | [Utility contract](../tests/utils_contract.goose) | Piece-tree edits against a flat-string oracle, live-root collection, Unicode boundaries and pure utilities |
+| [Independent document contract](../tests/multi_document_contract.goose) | 3/16/64 pooled documents, independent Undo/selection/saved state, actual save success/failure, stale generations, budgets and 700-operation model comparison |
 | [HTTP fixture](../tests/http_fixture.py), [native cancellation](../tests/cancel_contract.c) | TLS/redirect/byte limits, cancellation and handle lifetimes |
 | [JSON corpus](../tests/json_corpus.py) | Independent decoding, round trips and malformed/bounded inputs |
 | [Workbench fixture](../tests/workbench_fixture.py) | Edit/save/Git/search navigation, tabs/cursor restoration, Help/modal routing, initial Git modes, a subdirectory workspace, dirty-close decisions, idle frames and resource ownership |

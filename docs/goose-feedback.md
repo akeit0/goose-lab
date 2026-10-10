@@ -27,6 +27,16 @@ editor with independently resident buffers. Multiple such buffers need a shared
 arena with fixed-size document records, or separately owned stacks; merely
 placing the existing document type in a tab array is not valid Goose v1.
 
+The [independent-document experiment](experiments/independent-documents.md) now
+uses existing `reusable[]` slice pools and fixed descriptors for 3/16/64 resident
+buffers, independent Undo/saved state and generation-checked IDs. It is a headless
+full-snapshot baseline, separate from Workbench's Piece Tree. The measurement
+runner separates owned text/history, reusable/high-water storage and copy work;
+its capacity preflight also has a library-level range-sorting cost. Compare
+chunked and pooled-tree representations before attributing these costs to a
+missing move facility or requesting independent dynamic stacks. Pool reuse
+does not itself release committed memory to the OS.
+
 ## Values and worker boundaries
 
 Typed queues and isolated workers fit HTTP requests, Git jobs and search results

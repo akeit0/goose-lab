@@ -28,6 +28,8 @@ The [library map](libraries.md) lists imports and native targets;
 - [Toolchain requirements](toolchain.md) and [local configuration](local-development.md).
 - [API design and references](design.md) and [Goose feedback](goose-feedback.md).
 - [Validation](validation.md) and [third-party notices](../THIRD_PARTY.md).
+- [Independent document experiments](experiments/independent-documents.md): headless
+  slice-pool ownership, correctness and reproducible time/storage comparisons.
 
 Library guides describe current APIs, ownership, errors and limits. Application
 guides describe complete workflows and their domain-specific rules. Put shared

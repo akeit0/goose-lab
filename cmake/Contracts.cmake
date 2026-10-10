@@ -2,6 +2,7 @@ goose_lab_program(http_contract tests/http_contract.goose LIBRARIES goose_lab_ht
 add_executable(cancel_contract tests/cancel_contract.c)
 target_link_libraries(cancel_contract PRIVATE goose_lab_cancel)
 goose_lab_program(utils_contract tests/utils_contract.goose)
+goose_lab_program(multi_document_contract tests/multi_document_contract.goose MODULE_DIRS "${GOOSE_LAB_SOURCE_DIR}/tools")
 goose_lab_program(json_contract tests/json_contract.goose)
 goose_lab_program(json_probe tests/json_probe.goose)
 goose_lab_program(api_model_contract tests/api_model_contract.goose MODULE_DIRS "${GOOSE_LAB_SOURCE_DIR}/samples")
@@ -34,6 +35,7 @@ add_test(NAME http_contract COMMAND "${Python3_EXECUTABLE}"
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/http_fixture.py" $<TARGET_FILE:http_contract>)
 add_test(NAME cancel_contract COMMAND cancel_contract)
 add_test(NAME utils_contract COMMAND utils_contract "${CMAKE_CURRENT_SOURCE_DIR}/tools/unicode/GraphemeBreakTest.txt")
+add_test(NAME multi_document_contract COMMAND multi_document_contract "${CMAKE_CURRENT_BINARY_DIR}/multi-document-saved.txt")
 add_test(NAME json_contract COMMAND json_contract)
 add_test(NAME json_corpus COMMAND "${Python3_EXECUTABLE}"
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/json_corpus.py" $<TARGET_FILE:json_probe>)
