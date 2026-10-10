@@ -8,7 +8,10 @@ The separate [pool runtime experiment](experiments/pool-runtime.md) builds a
 standard-module-only probe against an explicitly selected upstream or fork
 checkout. Its four checks cover pool semantics, a recorded compiler diagnostic,
 isolated reservation exhaustion and the measurement runner; they are separate
-from the main configuration below.
+from the main configuration below. It also registers the
+[buffer storage comparison](experiments/buffer-storage.md). Routine checks use
+one upstream-tracking compatible fork; a separate upstream run is reserved for
+investigating a relevant difference.
 
 ```text
 cmake -S . -B build -DGOOSE_SOURCE_DIR=/path/to/compatible/goose

@@ -8,21 +8,25 @@ FFI adapters and fork-only module APIs. It is a separate CMake project using
 imports only `std` and `os`. The same source runs on explicitly selected upstream
 and fork checkouts without changing those checkouts.
 
-## Reproduce on two revisions
+## Reproduce on the compatible toolchain
+
+Routine validation uses one upstream-tracking fork, as described in
+[toolchain requirements](../toolchain.md). A separate upstream build is only
+needed to investigate a specific difference. Multiple explicit builds remain
+supported for those focused comparisons; the recorded two-revision example below
+is a historical measurement, not a requirement to repeat both every time.
 
 ```text
 cmake -S tools/experiments/runtime -B build-pool-fork -DGOOSE_SOURCE_DIR=/path/to/lab-toolchain
 cmake --build build-pool-fork --config Release --parallel
 ctest --test-dir build-pool-fork -C Release --output-on-failure
-cmake -S tools/experiments/runtime -B build-pool-upstream -DGOOSE_SOURCE_DIR=/path/to/upstream
-cmake --build build-pool-upstream --config Release --parallel
-ctest --test-dir build-pool-upstream -C Release --output-on-failure
-python tools/pool_runtime_experiment.py --build build-pool-fork --build build-pool-upstream
+python tools/pool_runtime_experiment.py --build build-pool-fork
 ```
 
 Optional native modules and JIT are disabled. No renderer or lab adapter is linked.
-Each project registers four checks: runtime semantics, the descriptor diagnostic,
-isolated reservation exhaustion, and a runner/accounting smoke check. This validates these selected revisions,
+Each project registers four pool checks: runtime semantics, the descriptor diagnostic,
+isolated reservation exhaustion, and a runner/accounting smoke check, plus the
+[buffer storage comparison](buffer-storage.md). This validates the selected revision,
 not arbitrary future upstream versions or the whole Workbench on upstream.
 
 The runner runs correctness and diagnostic probes before timing. Defaults are
