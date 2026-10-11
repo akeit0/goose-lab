@@ -23,8 +23,8 @@ cmake --build build-core --config Release --parallel
 ctest --test-dir build-core -C Release --output-on-failure
 ```
 
-With samples and tests enabled, the GUI configuration registers 25 checks and
-the GUI-free configuration registers 12. Enabling manual tools adds the
+With samples and tests enabled, the GUI configuration registers 26 checks and
+the GUI-free configuration registers 13. Enabling manual tools adds the
 `document_experiment_smoke` and `document_store_experiment_smoke` checks. Tests use loopback HTTP/TLS fixtures,
 temporary Git repositories and temporary files. Python fixtures do not contact
 public services. The checked-in TLS key is only a localhost test fixture.
@@ -42,6 +42,7 @@ still requires a working GPU/backend; it is not a software renderer.
 | [Persistent document Store](../tests/document_store_contract.goose) | Explicit owners, shared current/saved/Undo/Redo roots, 3/16/64 flat-model comparison, cross-piece edits, collection/remapping, stale IDs and failure preservation |
 | [Independent document contract](../tests/multi_document_contract.goose) | 3/16/64 pooled documents, independent Undo/selection/saved state, actual save success/failure, stale generations, budgets and 700-operation model comparison |
 | [HTTP fixture](../tests/http_fixture.py), [native cancellation](../tests/cancel_contract.c) | TLS/redirect/byte limits, cancellation and handle lifetimes |
+| [HTTP clients](../tests/http_clients_contract.goose), [client fixture](../tests/http_clients_fixture.py) | 3/16/64 independent generations/serials, barrier-controlled concurrency, cancel/close/reopen, retired results, binary ownership, bounded mailboxes and full shutdown cleanup |
 | [JSON corpus](../tests/json_corpus.py) | Independent decoding, round trips and malformed/bounded inputs |
 | [Workbench fixture](../tests/workbench_fixture.py) | Edit/save/Git/search navigation, tabs/cursor restoration, Help/modal routing, initial Git modes, a subdirectory workspace, dirty-close decisions, idle frames and resource ownership |
 | [Git/file fixture](../tests/git_fixture.py) | Process streams, files/watches, atomic-save conflicts, Git history, search and editor interactions |

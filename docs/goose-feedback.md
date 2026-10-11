@@ -64,6 +64,18 @@ do not put pointers to UI models or native font buffers in a queue. Request seri
 reject stale results independently of cooperative cancellation. See
 [the API sample](apps/api-browser.md) and [cancellation](io/cancellation.md).
 
+The [HTTP client Service](io/http-clients.md) now tests same-protocol composition
+without competing client-local pollers: one explicit owner dispatches a bounded
+worker queue to generation/serial-checked client mailboxes. Three confirmed
+concurrent requests and 3/16/64 lifecycle traces cover cancellation, immediate
+close/reopen, delayed/duplicate results, storage refusal and shutdown. Closed
+jobs retain their token owners until completions are drained. This needs no Goose
+compiler/runtime change; indexed buffers provide one shared payload tail.
+It still requires one Service per message protocol. Runtime queue addressing,
+multiple independent Service owners, streaming backpressure and adaptation of
+the existing search/Git clients remain separate questions. Counts/budgets bound
+the copied queue traffic; no zero-copy or total-memory claim follows from this.
+
 Variable-size values make accidental full-document copies expensive. A piece tree,
 byte arenas and bounded Undo records keep editing independent of a contiguous
 document copy. Render only visible lines and retain caches with explicit budgets.

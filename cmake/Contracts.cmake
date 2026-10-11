@@ -1,4 +1,5 @@
 goose_lab_program(http_contract tests/http_contract.goose LIBRARIES goose_lab_http)
+goose_lab_program(http_clients_contract tests/http_clients_contract.goose LIBRARIES goose_lab_http)
 add_executable(cancel_contract tests/cancel_contract.c)
 target_link_libraries(cancel_contract PRIVATE goose_lab_cancel)
 goose_lab_program(utils_contract tests/utils_contract.goose)
@@ -35,6 +36,8 @@ add_test(NAME module_paths COMMAND "${Python3_EXECUTABLE}"
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/module_paths.py" $<TARGET_FILE:goose> "${GOOSE_SOURCE_DIR}/stdlib")
 add_test(NAME http_contract COMMAND "${Python3_EXECUTABLE}"
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/http_fixture.py" $<TARGET_FILE:http_contract>)
+add_test(NAME http_clients_contract COMMAND "${Python3_EXECUTABLE}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/tests/http_clients_fixture.py" $<TARGET_FILE:http_clients_contract>)
 add_test(NAME cancel_contract COMMAND cancel_contract)
 add_test(NAME utils_contract COMMAND utils_contract "${CMAKE_CURRENT_SOURCE_DIR}/tools/unicode/GraphemeBreakTest.txt")
 add_test(NAME indexed_buffer_contract COMMAND indexed_buffer_contract)

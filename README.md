@@ -93,6 +93,11 @@ including 3/16/64 resident buffers and recorded snapshot/Piece Tree comparisons.
 with the [shared persistent document Store](docs/document/store.md), using equal
 history limits and 3/16/64 independently lived documents.
 
+[Independent HTTP clients](docs/io/http-clients.md) exercise Goose worker/typed-queue
+composition through one explicit Service, generation/serial routing and bounded
+owned-result mailboxes. `tools/http_clients_qualification.py` repeats the
+loopback lifecycle contract at Goose `-O0/-O1/-O2` on the selected fork.
+
 Windows uses installed Segoe UI, Consolas and available Japanese/symbol/emoji
 fallbacks. Linux probes installed DejaVu/Liberation/Noto fonts; macOS uses installed Arial
 and Menlo. Set `GOOSE_LAB_FONT_PATH` and `GOOSE_LAB_MONO_PATH` if lookup fails.
