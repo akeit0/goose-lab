@@ -253,6 +253,34 @@ were hash-checked; both source checkouts were clean. That baseline measured
 `local/references/stream/qualification-run/`; the commands above reproduce the
 public contract without those local records.
 
+The compact qualification at clean lab
+`5ce2a9b10aa3eda6a171f8defe17decab6f46676` and the same clean fork passed
+all nine paired runs (18 processes), again checking 2988 producer pages,
+828 real streams, 74322 matches and 900 ACK/Cancel races. It also checked
+every match preview, issue detail, codec's independent golden image, maximum
+Batch round-trip, malformed/truncated decode rejection and the 64-payload
+compaction model. Compiler, generated C/binaries, native archives and 143
+snapshot files were hash-checked. The layout probe confirmed the 61-byte queue
+prefix and the current fixed headers listed above.
+
+For the complete 3/16/64-search traces, all nine runs measured these queue
+image sizes; scheduling changes the retained/shifted byte peaks:
+
+| Clients | Messages | Fixed Page equivalent bytes | Compact queue bytes | Peak retained bytes | Shifted bytes |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 3 | 15 | 668880 | 22098 | 2300..6900 | 0..6980 |
+| 16 | 80 | 3567360 | 119008 | 11500..16484 | 49810..118132 |
+| 64 | 320 | 14269440 | 481792 | 16548 | 270410..370544 |
+
+The fixed equivalent is the same message count times the original Page's
+44592-byte representation, not a second toolchain run or a throughput estimate.
+For the 64-client sparse fixture, queue images decrease by 96.6%; encoded exports
+still copy 462272 bytes and compaction adds the shifted bytes above. Maximum-size
+packets have the overhead described earlier. The main Windows/MSVC Release
+build passed all 27 CTest checks in 91.64 seconds. Raw records and snapshots stay
+in ignored `local/references/stream/compact-qualification-run/`; reproduction
+uses the same public commands above.
+
 The existing `lab.fs.search_client` and UI integrations keep their single-client
 contract. This library is a separately verified alternative. Runtime queue
 instances, unbounded lane counts, fair multiplexing of thread-owned search

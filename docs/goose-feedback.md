@@ -88,7 +88,10 @@ flat byte packet and storing only ready payloads in one grow-shrink tail reduces
 the fixed metadata/header to 10047 bytes. The independent oracle checks actual
 queue bytes, previews and codec layout as well as result positions. Removal now
 shifts later arena bytes; full-capacity packets can be nine bytes larger than the
-old image, and owned exports remain fixed-size. This proves a representation
+old image, and owned exports remain fixed-size. The sparse 64-search fixture
+uses 481792 queue-image bytes versus 14269440 for the same 320 messages at the
+old fixed size, while compaction shifts 270410..370544 bytes across nine runs.
+This proves a representation
 choice, not a universal throughput/RSS improvement. The lane count remains static
 and the native 16-read quota still needs per-worker budgeting. Dynamic queue
 addressing, fair multiplexing and different arena reuse policies remain separate
