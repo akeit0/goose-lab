@@ -82,9 +82,12 @@ The caller keeps request payloads in its own bounded store and uses `Demand.key`
 to find them. The queue owns no worker, native token or protocol Service, and
 needs no native target. Its fixed records do not combine resizable Service tails.
 The representation reserves all 128 descriptors even with a smaller pending
-limit. Enqueue/removal scan at most 128 records; selection scans at most eight
-domains times 128 records. This avoids per-demand payload allocation and shifting
-survivors, with a deliberate fixed-table cost appropriate to a small bounded set.
+limit. Enqueue/cancellation scan at most 128 records; selection also scans the
+table once, comparing domain distance and FIFO ticket. Empty queues or masks with
+no configured domain return without scanning. Accept validates the ticket and
+selection with at most two table scans. This avoids per-demand payload allocation
+and shifting survivors, with a deliberate fixed-table cost appropriate to a small
+bounded set.
 
 Use the operations in this order:
 
@@ -92,9 +95,11 @@ Use the operations in this order:
    returns BUSY, and a full queue returns LIMIT without consuming a ticket.
 2. Poll all protocol owners, then `peek(queue, eligible_mask)` selects demand.
    Exclude domains whose own Service cannot currently start work.
-3. Submit through the selected Service. On success, `accept(queue, ticket)`
-   removes demand and gives the next domain its turn. On shared native LIMIT,
-   leave demand and cursor unchanged, stop admission, poll owners and retry.
+3. Submit through the selected Service, then call `accept(queue, ticket, eligible_mask)`
+   with the same mask and no intervening queue mutation. On success it removes
+   demand and gives the next domain its turn. A queued but unselected ticket
+   returns BUSY without mutation; an absent ticket returns STALE. On shared native
+   LIMIT, leave demand and cursor unchanged, stop admission, poll owners and retry.
 4. `cancel(queue, ticket)` removes pending demand without changing the turn.
    Cancelling a Flight already admitted is still the protocol Service's job.
 
@@ -110,6 +115,9 @@ The [admission contract](../../tests/admission_services_contract.goose) and
 [independent fixture](../../tests/admission_services_fixture.py) check 1800
 operations against a Python list model across 2/3/8 domains, including eligibility
 masks, FIFO order, cancellation, stale tickets, duplicate keys and bounded refusal.
+It also fills all 128 slots across eight domains, checks refusal of out-of-turn
+and non-head accepts without changing the Queue image, selects a locally eligible
+domain, and verifies FIFO after reusing an earlier physical slot with a new ticket.
 The real workload keeps the same HTTP/search owners alive across reuse cycles.
 Four HTTP requests compete with one search for a single free native token slot;
 search gets its turn before the HTTP backlog drains. Every cycle also exercises
@@ -134,7 +142,8 @@ retained allocations, runtime and native transport state; they are observations,
 not a test that the OS returns memory. The record also retains each cycle's arena
 lengths and high-water value, checked separately from total process memory.
 
-The Windows/MSVC qualification on 2026-10-11 passed:
+The initial Windows/MSVC qualification on 2026-10-11, before guarded accept and
+single-scan selection, passed:
 
 | Goose optimization | Cycles in one process | Successful admissions | Independently checked search hits | Elapsed seconds |
 | --- | ---: | ---: | ---: | ---: |
@@ -164,3 +173,14 @@ Immutable source/archive snapshots and complete records remain under ignored
 Records include the new working-tree sources and their hashes. A selected-level
 O2 run of the existing HTTP contract also passed its 996-request oracle, checking
 that the runner still supports the original contract without an O1 layout input.
+
+The guarded-accept/single-scan refinement passed a fresh O0/O1/O2 snapshot
+qualification with 16 reuse cycles per level. It checked 5400 list-model
+operations, 384 maximum-capacity admissions with FIFO slot reuse and masked
+selection, plus 240 real service admissions and 3840 flat-model search hits.
+Rejected accepts preserve the entire Queue image, including cursor and counters.
+All native capacities were reacquired in every cycle and at shutdown; the focused
+CTest passed. Complete records and source/archive hashes remain under ignored
+`local/references/admission-services/refinement-run/`. These checks establish the
+new acceptance contract and selection order; they do not measure a wall-clock
+speedup from fewer table scans or repeat the earlier long-session observation.

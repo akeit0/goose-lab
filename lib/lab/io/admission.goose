@@ -29,29 +29,36 @@ fn enqueue(s: Queue&, domain: i64, key: u64) -> Demand, i32 {
 // No mutation on selection or shared-capacity refusal. Pass an eligible mask to
 // skip domains blocked on their own service limits. The caller polls all owners
 // and stops this admission pass on a shared native LIMIT.
+fn selected(s: const Queue&, eligible: u64) -> i64 {
+    let mask = eligible & (((1 as u64) << s.limits.domains) - 1);
+    if s.counters.pending == 0 || mask == 0 { return -1; }
+    var slot: i64 = -1; var rank = s.limits.domains;
+    for i in s.limits.pending {
+        let d = s.entries[i];
+        if d.ticket == 0 || (mask & ((1 as u64) << d.domain)) == 0 { continue; }
+        let priority = (d.domain + s.limits.domains - s.cursor) % s.limits.domains;
+        if slot < 0 || priority < rank || (priority == rank && d.ticket < s.entries[slot].ticket) { slot = i; rank = priority; }
+    }
+    slot
+}
 fn peek(s: const Queue&, eligible: u64 = 255) -> Demand, i32 {
     if s.code != OK { return Demand {}, INVALID; }
-    for step in s.limits.domains {
-        let domain = (s.cursor + step) % s.limits.domains;
-        if (eligible & ((1 as u64) << domain)) == 0 { continue; }
-        var first = Demand {};
-        for i in s.limits.pending {
-            let d = s.entries[i];
-            if d.ticket != 0 && d.domain == domain && (first.ticket == 0 || d.ticket < first.ticket) { first = d; }
-        }
-        if first.ticket != 0 { return first, OK; }
-    }
-    return Demand {}, EMPTY;
+    let slot = selected(s, eligible);
+    if slot < 0 { return Demand {}, EMPTY; }
+    return s.entries[slot], OK;
 }
 fn find(s: const Queue&, ticket: u64) -> i64 {
     if ticket == 0 { return -1; }
     for i in s.limits.pending { if s.entries[i].ticket == ticket { return i; } } -1
 }
-// Call only after the selected request was admitted by its protocol Service.
+// Use the same eligibility mask as peek, without intervening queue mutation.
+// Call after that selected request is admitted by its protocol Service. A queued
+// but unselected ticket returns BUSY without changing demand, turn or counters.
 // Removal does not represent native completion or grant a native credit.
-fn accept(s: Queue&, ticket: u64) -> i32 {
+fn accept(s: Queue&, ticket: u64, eligible: u64 = 255) -> i32 {
     if s.code != OK { return INVALID; }
     let slot = find(s, ticket); if slot < 0 { return STALE; }
+    if selected(s, eligible) != slot { return BUSY; }
     s.cursor = (s.entries[slot].domain + 1) % s.limits.domains;
     s.entries[slot] = Demand {}; s.counters.pending--; s.counters.accepted++; OK
 }

@@ -213,8 +213,11 @@ holds bounded demand keys, rotates among eligible domains after successful
 admission, and keeps FIFO order within each domain. Request payloads and Flights
 remain owned by their existing stores and Services. Shared-capacity refusal
 preserves the selected turn until polling frees capacity; a caller skips domains
-blocked by their local limits using an eligibility mask. This verifies admission
-order without claiming equal completion time or manufacturing native credits.
+blocked by their local limits using an eligibility mask. Acceptance checks the
+selected ticket with the same mask, refusing queued demands out of turn without
+mutating the owner. Selection needs one bounded table scan and no extra index.
+This verifies admission order without claiming equal completion time or
+manufacturing native credits.
 
 Give each producer one unACKed data page. Polling or taking does not grant
 credit; explicit ACK/discard does. Keeping a page can stall that producer while

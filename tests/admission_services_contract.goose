@@ -30,6 +30,31 @@ fn queue_model(domains: i64) {
     queue.next_ticket = 0xFFFFFFFFFFFFFFFF;
     let rejected, code = lab_io_admission::enqueue(queue, 0, 999); assert(code == lab_io_admission::LIMIT && rejected.ticket == 0);
 }
+fn queue_capacity() {
+    var queue = lab_io_admission::create(lab_io_admission::Limits { domains: 8, pending: 128 });
+    for i in 128 { let d, code = lab_io_admission::enqueue(queue, i % 8, (i / 8) as u64); assert(code == 0 && d.ticket == (i + 1) as u64); }
+    let image = to_bytes([queue]);
+    let overflow, oc = lab_io_admission::enqueue(queue, 0, 16); assert(oc == lab_io_admission::LIMIT && overflow.ticket == 0);
+    assert(lab_io_admission::accept(queue, 9) == lab_io_admission::BUSY); // Not the FIFO head.
+    assert(lab_io_admission::accept(queue, 2) == lab_io_admission::BUSY); // Not this domain's turn.
+    assert(to_bytes([queue]) == image);
+    assert(lab_io_admission::accept(queue, 2, 2) == 0); // Domain 1 alone is eligible.
+    let after = to_bytes([queue]);
+    let zero, zc = lab_io_admission::peek(queue, 0); assert(zc == lab_io_admission::EMPTY && zero.ticket == 0);
+    let high, hc = lab_io_admission::peek(queue, (1 as u64) << 50); assert(hc == lab_io_admission::EMPTY && high.ticket == 0);
+    assert(lab_io_admission::accept(queue, 3, 0) == lab_io_admission::BUSY && to_bytes([queue]) == after);
+    assert(lab_io_admission::cancel(queue, 1) == 0 && lab_io_admission::cancel(queue, 1) == lab_io_admission::STALE);
+    let newer, nc = lab_io_admission::enqueue(queue, 0, 16); assert(nc == 0 && newer.ticket == 129);
+    let head, pc = lab_io_admission::peek(queue, 1); assert(pc == 0 && head.ticket == 9);
+    while lab_io_admission::stats(queue).pending > 0 {
+        let d, code = lab_io_admission::peek(queue, 255 | ((1 as u64) << 50)); assert(code == 0);
+        print("boundary,", d.ticket, ",", d.domain, ",", d.key);
+        assert(lab_io_admission::accept(queue, d.ticket) == 0);
+    }
+    let stats = lab_io_admission::stats(queue); assert(stats.queued == 129 && stats.accepted == 128 && stats.cancelled == 1);
+    let empty, ec = lab_io_admission::peek(queue); assert(ec == lab_io_admission::EMPTY && empty.ticket == 0);
+    print("boundary-complete,", stats.queued, ",", stats.accepted, ",", stats.cancelled);
+}
 fn tokens_available(expected: i64) {
     var tokens: lab_io_cancel::Token[..64] = [];
     for i in expected { let token = lab_io_cancel::create(); assert(token.id != 0); tokens.push(token); }
@@ -82,6 +107,7 @@ fn search_result(s: lab_fs_search_clients::Service&, id: lab_io_stream::Id, roun
 fn main() {
     let argv = args(); assert(argv.len == 4); let rounds, rc = parse_int(argv[3]); assert(rc && rounds >= 1 && rounds <= 4096);
     for domains in [2, 3, 8] { queue_model(domains); }
+    queue_capacity();
     assert(lab_io_admission::create(lab_io_admission::Limits { domains: 0 }).code == lab_io_admission::INVALID);
     assert(lab_net_http::init() == 0);
     var http = lab_net_http_clients::create(lab_net_http_clients::Limits { clients: 4, workers: 2, body_bytes: 12288 });

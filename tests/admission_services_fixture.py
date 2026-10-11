@@ -44,6 +44,8 @@ def validate(stdout):
                 found = next((d for d in pending if d[0] == target), None)
                 if found is None:
                     code = 3
+                elif op < 9 and found != min(pending, key=lambda d: ((d[1] - cursor) % domains, d[0])):
+                    code = 4
                 else:
                     pending.remove(found)
                     if op < 9:
@@ -55,6 +57,15 @@ def validate(stdout):
             expected = f"model,{domains},{step},{op},{domain},{key},{target},{code}," + ",".join(map(str, (*result, len(pending), queued, accepted, cancelled)))
             if next(lines) != expected:
                 raise AssertionError(f"Admission list model mismatch: {domains}/{step}")
+    pending = [(i + 1, i % 8, i // 8) for i in range(128) if i + 1 not in (1, 2)] + [(129, 0, 16)]
+    cursor = 2
+    while pending:
+        first = min(pending, key=lambda d: ((d[1] - cursor) % 8, d[0]))
+        if next(lines) != "boundary," + ",".join(map(str, first)):
+            raise AssertionError("Maximum-capacity/FIFO reuse mismatch")
+        pending.remove(first); cursor = (first[1] + 1) % 8
+    if next(lines) != "boundary-complete,129,128,1":
+        raise AssertionError("Missing maximum-capacity cleanup")
     rows = list(lines)
     marker = rows.pop()
     if not marker.startswith("Admission service contracts passed,"):
@@ -100,10 +111,10 @@ def validate(stdout):
             search_generation += 1; search_serial = 0
     if at != len(rows):
         raise AssertionError("Trailing service trace")
-    return {"cycles": rounds, "model_operations": 1800, "admissions": rounds * 5,
+    return {"cycles": rounds, "model_operations": 1800, "boundary_admissions": 128, "admissions": rounds * 5,
             "http_results": rounds * 4, "search_hits": hit_count, "search_completions": rounds,
             "quota_refusals": rounds * 2, "resource_reacquisitions": rounds + 1,
-            "rows": 1800 + len(rows) + 1, "retained_arenas": arena}
+            "rows": 1928 + len(rows) + 1, "retained_arenas": arena}
 
 
 def run(binary, cycles=16):
