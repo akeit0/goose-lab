@@ -10,7 +10,7 @@ The validated published revision is `c2ecb4421facdc6476214606b67488df93eaa033`,
 which merges upstream `ac77e1616542da1dcb3ebf54b1f43d9b32b6369c`, including
 the merged implicit inline-return correction and subsequent compiler/runtime
 improvements. The synchronization merge is `3e00736`.
-Windows/MSVC Release passed the 26 main checks, five pool/storage checks and
+Windows/MSVC Release passed the 27 main checks, five pool/storage checks and
 15 focused return executions at Goose `-O0/-O1/-O2`.
 
 The synchronization is pushed to `lab-toolchain`.

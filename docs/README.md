@@ -11,7 +11,7 @@ The [library map](libraries.md) lists imports and native targets;
 | Data | [JSON parsing/writing](data/json.md), [JSON files](data/json-files.md), [field editing](data/json-edit.md) |
 | Buffers | [Indexed byte storage](buffer/indexed.md): explicit Stores, independent lifetimes, direct lookup and bounded refusal |
 | Documents | [Persistent document Store](document/store.md): multiple explicit-owner documents, shared Undo/saved roots, collection and equal-history comparison |
-| I/O | [Event loop and processes](io/io-core.md), [cancellation](io/cancellation.md), [independent HTTP clients](io/http-clients.md), [process stdin/framing](io/process-input.md) |
+| I/O | [Event loop and processes](io/io-core.md), [cancellation](io/cancellation.md), [independent HTTP clients](io/http-clients.md), [bounded streams/search clients](io/streams.md), [process stdin/framing](io/process-input.md) |
 | Files | [Asynchronous reads/listings](io/async-files.md), [atomic saves](io/atomic-save.md), [watching/reconciliation](io/file-watching.md) |
 | UI authoring | [Composition](ui/ui-composition.md), [Clay layout](ui/layout.md), [scrolling/lists](ui/scrolling.md), [tree view](ui/tree-view.md), [commands/modals](ui/command-palette.md) |
 | Text and rendering | [Renderer](ui/modern-ui.md), [font families/wrapping](ui/text-layout.md), [read-only text view](ui/text-view.md), [Unicode/memory/idle work](ui/text-foundation.md), [IME](ui/ime.md), [emoji](ui/emoji.md) |

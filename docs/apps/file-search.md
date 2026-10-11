@@ -5,6 +5,11 @@ and the GUI. The `find_files` CLI works in the GUI-free build. The workbench Edi
 uses the same engine through one owned worker, then opens a selected match in
 the editable document.
 
+For independently lived concurrent searches, the separate
+[`lab.fs.search_clients` library](../io/streams.md) uses generation/serial routing,
+explicit page ACKs and bounded worker lanes. Existing CLI/Workbench integration
+continues to use its current adapter.
+
 ```text
 cmake --build build --config Release --target find_files workbench --parallel 8
 python tools/run.py find_files --include "**/*.goose" -- . "fn main"

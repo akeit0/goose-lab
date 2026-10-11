@@ -98,6 +98,11 @@ composition through one explicit Service, generation/serial routing and bounded
 owned-result mailboxes. `tools/http_clients_qualification.py` repeats the
 loopback lifecycle contract at Goose `-O0/-O1/-O2` on the selected fork.
 
+[Bounded search streams](docs/io/streams.md) add explicit page ACKs on distinct
+typed worker lanes, stalled-consumer/cancellation checks and 3/16/64 real searches
+against an independent flat-file oracle. `tools/stream_qualification.py` records
+the selected toolchain, repeated contracts and fixed representation costs.
+
 Windows uses installed Segoe UI, Consolas and available Japanese/symbol/emoji
 fallbacks. Linux probes installed DejaVu/Liberation/Noto fonts; macOS uses installed Arial
 and Menlo. Set `GOOSE_LAB_FONT_PATH` and `GOOSE_LAB_MONO_PATH` if lookup fails.

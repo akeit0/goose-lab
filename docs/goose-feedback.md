@@ -76,6 +76,18 @@ multiple independent Service owners, streaming backpressure and adaptation of
 the existing search/Git clients remain separate questions. Counts/budgets bound
 the copied queue traffic; no zero-copy or total-memory claim follows from this.
 
+The [stream/search experiment](io/streams.md) extends that boundary with one
+unACKed page per request. Runtime worker IDs cannot address typed queues, so
+eight concrete worker entry points specialize distinct `Ack<Payload, Lane>`
+types. This prevents a foreign worker from consuming an ACK, while tickets and
+sequences reject old messages. It covers 3/16/64 clients, held consumers,
+ACK/Cancel races, close/reopen and native-resource cleanup with real search data.
+Goose/native API changes were unnecessary. The resulting search Service reserves
+2859463 fixed bytes for 64 full-capacity mailboxes, and the lane count is static.
+The native read registry's 16-slot quota also requires a per-worker read budget.
+These are concrete library composition/storage costs; dynamic queue addressing,
+fair multiplexing and compact mailboxes remain separate investigations.
+
 Variable-size values make accidental full-document copies expensive. A piece tree,
 byte arenas and bounded Undo records keep editing independent of a contiguous
 document copy. Render only visible lines and retain caches with explicit budgets.
