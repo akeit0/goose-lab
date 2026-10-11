@@ -42,7 +42,7 @@ See [the module map](docs/libraries.md) and [architecture](docs/architecture.md)
 ## Build
 
 Prerequisites: CMake 3.27+, a C/C++ toolchain, Git, and the compatible Goose
-source checkout with its SDL submodule initialized for GUI builds. Python 3 is
+source checkout. GUI builds need this repository's SDL submodule. Python 3 is
 needed for contract tests. Presets require CMake 3.21+.
 
 ```text
@@ -99,6 +99,11 @@ history limits and 3/16/64 independently lived documents.
 composition through one explicit Service, generation/serial routing and bounded
 owned-result mailboxes. `tools/http_clients_qualification.py` repeats the
 loopback lifecycle contract at Goose `-O0/-O1/-O2` on the selected fork.
+
+[HTTP/search composition](docs/io/mixed-services.md) checks separate Goose owners
+sharing native capacity: one Service can stop while the other continues, and
+token-quota refusal preserves request identity until admission can be retried.
+The same qualification runner supports `--contract mixed_services`.
 
 [Bounded search streams](docs/io/streams.md) add explicit page ACKs on distinct
 typed worker lanes, stalled-consumer/cancellation checks and 3/16/64 real searches

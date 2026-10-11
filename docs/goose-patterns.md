@@ -196,6 +196,16 @@ program. Eight concrete `thread_fn` entry points call a shared generic lane
 implementation because the thread entry point itself cannot be generic.
 This is a useful static pattern, with explicit lane count and owner limits.
 
+Different protocols can keep separate owner variables and borrow each through
+their APIs. The [HTTP/search composition contract](io/mixed-services.md) checks
+both shutdown directions, close/reopen, held exports and recovery from their
+shared native cancel-token quota. Queue isolation does not isolate native
+capacity: a Flight holds its token until its completion is drained, and every
+owner contributes to the same 64-slot process limit. Treat admission refusal as
+recoverable without advancing request identity; poll completions before retrying.
+This supports separate protocol owners, while one owner per identical protocol
+remains the rule.
+
 Give each producer one unACKed data page. Polling or taking does not grant
 credit; explicit ACK/discard does. Keeping a page can stall that producer while
 other active lanes progress. If every lane waits, queued jobs wait too. This

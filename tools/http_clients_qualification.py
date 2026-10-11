@@ -1,4 +1,4 @@
-"""Snapshot and qualify HTTP client lifetimes at Goose O0/O1/O2 on Windows/MSVC."""
+"""Qualify HTTP lifetimes or HTTP/search composition at Goose O0/O1/O2 on Windows/MSVC."""
 import argparse
 import importlib.util
 import json
@@ -27,28 +27,32 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", default="build-core")
     parser.add_argument("--configuration", default="Release")
+    parser.add_argument("--contract", choices=("http_clients", "mixed_services"), default="http_clients")
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     if os.name != "nt" or args.configuration != "Release" or not 1 <= args.repeats <= 20:
         parser.error("This qualification requires Windows/MSVC Release and 1..20 repeats")
     build = Path(args.build).resolve(); output = Path(args.output).resolve()
+    program = args.contract + "_contract"
     if output.exists():
         parser.error("Output already exists; use a fresh directory")
     # CMake owns dependency freshness and the exact native link closure.
     subprocess.run(["cmake", "--build", str(build), "--config", args.configuration,
-                    "--target", "http_clients_contract", "--parallel", "4"], check=True, timeout=180)
+                    "--target", program, "--parallel", "4"], check=True, timeout=180)
     checkout = Path(cache(build)["GOOSE_SOURCE_DIR"])
     compiler = executable(build / "goose", args.configuration, "goose")
     tc = load("http_clients_toolchain", checkout / "scripts/toolchain.py"); cc = tc.test_cc("native")
     if cc.style != "msvc":
         parser.error("This qualification currently supports the MSVC CMake generator")
-    project = build / "http_clients_contract.vcxproj"
+    project = build / (program + ".vcxproj")
     ns = {"m": "http://schemas.microsoft.com/developer/msbuild/2003"}
     dependencies = None
     for group in ET.parse(project).getroot().findall("m:ItemDefinitionGroup", ns):
         if "'Release|x64'" in group.attrib.get("Condition", ""):
             dependencies = group.findtext("m:Link/m:AdditionalDependencies", namespaces=ns)
+            defines = [d for d in group.findtext("m:ClCompile/m:PreprocessorDefinitions", namespaces=ns).split(";")
+                       if d.startswith("GOOSE_LAB_")]
     if dependencies is None or "%(" in dependencies:
         raise RuntimeError("Cannot resolve the Release native link closure")
     output.mkdir(parents=True, exist_ok=False)
@@ -56,13 +60,16 @@ def main():
     shutil.copytree(ROOT / "lib", sources / "lib")
     shutil.copytree(ROOT / "native", sources / "native")
     shutil.copytree(checkout / "stdlib", sources / "stdlib")
-    for source, target in ((ROOT / "tests/http_clients_contract.goose", "contract.goose"),
-                           (ROOT / "tests/http_clients_fixture.py", "fixture.py"),
+    for source, target in ((ROOT / f"tests/{program}.goose", "contract.goose"),
+                           (ROOT / f"tests/{args.contract}_fixture.py", "fixture.py"),
                            (Path(__file__), "qualification.py"), (project, "link.vcxproj"),
                            (ROOT / "tools/document_experiment.py", "document_experiment.py"),
                            (ROOT / "tools/run.py", "run.py"), (ROOT / "tools/profile.py", "profile.py"),
                            (checkout / "scripts/toolchain.py", "toolchain.py")):
         shutil.copyfile(source, sources / target)
+    if args.contract == "mixed_services":
+        shutil.copyfile(ROOT / "tests/http_clients_fixture.py", sources / "http_clients_fixture.py")
+        sys.path.insert(0, str(sources))
     libraries, library_hashes = [], {}
     for dependency in dependencies.split(";"):
         if not dependency:
@@ -76,14 +83,13 @@ def main():
             if "/" in dependency or "\\" in dependency:
                 raise RuntimeError(f"Missing link input: {original}")
             libraries.append(dependency)
-    record = {"complete": False, "lab": revision(ROOT), "toolchain": revision(checkout),
+    record = {"complete": False, "contract": args.contract, "lab": revision(ROOT), "toolchain": revision(checkout),
               "compiler_sha256": digest(compiler), "native_compiler": cc.desc, "native_optimization": 2,
-              "native_archives": library_hashes, "link_inputs": libraries,
+              "native_archives": library_hashes, "link_inputs": libraries, "native_defines": defines,
               "source_sha256": {str(p.relative_to(sources)): digest(p) for p in sources.rglob("*") if p.is_file()},
               "repeats": args.repeats, "levels": [], "limits": "Loopback correctness qualification; no speed or queue/RSS memory ranking."}
     extra = ["/utf-8", "/MT", "/F67108864", f"/I{sources / 'native'}"]
-    defines = ["GOOSE_LAB_HTTP=1", "GOOSE_LAB_CANCEL=1"]
-    fixture = load("http_clients_fixture", sources / "fixture.py")
+    fixture = load("qualified_" + args.contract + "_fixture", sources / "fixture.py")
 
     def save():
         (output / "results.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
@@ -106,8 +112,13 @@ def main():
                 started = time.monotonic(); process = fixture.run(binary)
                 (output / f"O{level}-{repeat}.stdout").write_text(process.stdout, encoding="utf-8")
                 (output / f"O{level}-{repeat}.stderr").write_text(process.stderr, encoding="utf-8")
-                item["runs"].append({"repeat": repeat, "exit_code": process.returncode, "model_requests": 996,
-                                     "checked_rows": fixture.validate(process.stdout), "wall_seconds": time.monotonic() - started})
+                metrics = fixture.validate(process.stdout)
+                run = {"repeat": repeat, "exit_code": process.returncode, "wall_seconds": time.monotonic() - started}
+                if args.contract == "http_clients":
+                    run.update(model_requests=996, checked_rows=metrics)
+                else:
+                    run.update(metrics)
+                item["runs"].append(run)
                 save(); print(f"O{level}, repeat {repeat + 1}: passed", flush=True)
         generated = output / "contract-O1.c"
         typename = re.search(r"typedef struct (lab_net_http_clients_Service_\w+)\b", generated.read_text(encoding="utf-8"))
@@ -121,13 +132,13 @@ def main():
             raise RuntimeError("Layout probe compilation failed")
         measured = subprocess.run([str(probe_binary)], check=True, capture_output=True, text=True, timeout=10)
         record["fixed_service_bytes"] = int(measured.stdout)
-        record["fixed_layout_limits"] = "Includes reserved client/flight/buffer descriptors and tail header; excludes arena backing, queues, workers, native HTTP and temporaries."
+        record["fixed_layout_limits"] = "HTTP Service only: includes reserved client/flight/buffer descriptors and tail header; excludes search Service, arena backing, queues, workers, native HTTP and temporaries."
         record["complete"] = True
     except Exception as error:
         record["error"] = str(error); raise
     finally:
         save()
-    print(f"Fixed Service representation: {record['fixed_service_bytes']} bytes")
+    print(f"Fixed HTTP Service representation: {record['fixed_service_bytes']} bytes")
 
 
 if __name__ == "__main__":
