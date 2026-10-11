@@ -157,13 +157,18 @@ bounded descriptor scans and occasional compaction: a pressure case moves two
 65536-byte survivors once to fit a larger replacement. Logical bytes and arena
 length must therefore be measured separately.
 
-In the eager-compaction baseline, fixed search Service storage decreased from
-2859463 to 10047 bytes, excluding the payload tail and caller-owned exports. The
+Current fixed search Service storage is 10195 bytes, versus 2859463 in the original
+fixed-mailbox implementation, excluding the payload tail and caller-owned exports.
+Slot storage and work counters add 148 bytes over the eager-compaction header. The
 64-client sparse trace transported 481792 queue-image bytes versus a 14269440
 fixed-Page equivalent, a 96.6% reduction. The equivalent uses the same message
 count times the old fixed Page size; it is not a second throughput run.
 That baseline additionally shifted 270410..370544 bytes across repeats. Current
-slot storage changes deletion/retention work, while retaining the queue codec. A
+slot storage moves zero bytes on that trace, with 37568..47104 gap-search
+descriptor visits; the fixture does not exercise retained-gap writes. The
+controlled held-neighbor case separately verifies 98304 reused bytes without
+additional survivor moves. Retaining the queue codec keeps queue-byte totals
+unchanged. A
 maximum-size encoded Batch makes its queue image nine bytes larger than the
 old fixed Page. Compact transport depends on occupancy, not just the type name.
 

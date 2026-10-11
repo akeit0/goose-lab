@@ -110,3 +110,10 @@ stream/native sources, builds all three contracts at Goose O0/O1/O2 and runs
 three repeats per level on one selected fork. It measures the generated Store
 and Service layouts. This is bounded correctness and representation evidence;
 it does not establish throughput, fair scheduling or long-session RSS behavior.
+
+The clean Windows/MSVC record at lab `aeaefb2` and fork
+`c2ecb4421facdc6476214606b67488df93eaa033` passed all nine groups of three contracts.
+Its slot models checked 243000 operations, 2430 checkpoints and 59013 unchanged
+quota refusals; maximum-capacity and pressure/reuse checks passed in every process.
+The [stream qualification record](../io/streams.md#verification) describes source
+hashes, measured fixed layouts, payload copying and descriptor-work results.

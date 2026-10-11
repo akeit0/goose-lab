@@ -288,6 +288,39 @@ build passed all 27 CTest checks in 91.64 seconds. Raw records and snapshots sta
 in ignored `local/references/stream/compact-qualification-run/`; reproduction
 uses the same public commands above.
 
+The slot-arena qualification at clean lab
+`aeaefb23ca5f68433fc90f12f1e90bf51ae0a4d5` and the same clean fork passed
+all nine groups of three contracts (27 processes): Goose O0/O1/O2, three repeats
+each. Independent models checked 243000 variable-value operations, 2430 flat-byte
+checkpoints and 59013 quota refusals, alongside the same 2988 producer trace pages,
+828 search streams, 74322 matches and 900 ACK/Cancel races. All runs passed native
+registry reacquisition, maximum arena reuse, owned exports and pressure/hole reuse.
+Compiler, nine generated C/binary pairs, native archives and 147 source snapshots
+were hash-checked; fixed layouts match the table above.
+
+| Clients | Queue bytes | Peak live bytes | Peak arena bytes | Moved bytes | Gap/compaction descriptor visits |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 3 | 22098 | 4600..6900 | 4600..6900 | 0 | 48..63 |
+| 16 | 119008 | 14056..16484 | 14056..16484 | 0 | 2512..3136 |
+| 64 | 481792 | 16100..16548 | 16100..16548 | 0 | 37568..47104 |
+
+The queue codec and exact queue-byte totals remain the same. These complete-search
+traces require neither retained-gap writes nor pressure compaction; they do not
+show a hole-reuse workload. The controlled 64-varied-page permutation moves zero
+bytes instead of 285768. The three-client pressure case moves 131072 bytes once,
+then holds both outer pages while middle-page updates reuse 98304 bytes without
+additional moves. At its sparse midpoint the arena is 196608 bytes for 163840 live
+bytes: the retained 32768-byte hole is an explicit tradeoff. The 64-search trace
+replaces the earlier 270410..370544 moved bytes with descriptor visits; timing is
+not qualified as a throughput improvement. Clear scans and implicit runtime copies
+are outside those visit/move counters.
+
+During integration the main Windows/MSVC Release suite passed all 28 CTest checks
+in 90.67 seconds. The final stream/slot-arena focused rerun passed both checks in
+10.85 seconds after adding the held-neighbor reuse case. Raw records remain in
+ignored `local/references/stream/slot-arena-reuse-run/`; the runner above reproduces
+the current contracts using a new output directory.
+
 The existing `lab.fs.search_client` and UI integrations keep their single-client
 contract. This library is a separately verified alternative. Runtime queue
 instances, unbounded lane counts, fair multiplexing of thread-owned search
