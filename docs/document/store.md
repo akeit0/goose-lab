@@ -145,6 +145,18 @@ copies. Arena savings exclude the approximately 1 MiB fixed descriptors in both
 representations. These are representation results, not a total-memory or platform
 speed ranking. Ignored records are the directories above, containing revisions,
 source snapshots/hashes, binary/compiler hashes, raw output and oracle results.
+These records use clean lab `abf7b71` and clean compatible fork
+`c2ecb4421facdc6476214606b67488df93eaa033`.
+
+A second clean record, `local/references/document-store/unicode-64k-run`, compares
+16 documents of 65536 bytes with Japanese/combining/emoji text, 64 rounds and
+32-entry history. All six processes (two representations, three repeats) passed.
+Snapshot/shared arena high-water is 35717120/1507968 bytes respectively; snapshot
+copied bytes are 78643200, while shared inserted/collection/growth bytes are
+1573888/8916032/5374912. The latter total 15864832, with 35056 node-record writes
+separate. This checks larger, multi-Piece input; its timed edits still replace the
+first ASCII byte, so it does not establish a general editing speed result.
+
 The qualification runner compiles copied contract/library sources at O0/O2, holds native C
 optimization at 2 and probes both generated fixed layouts; CMake tests cover O1.
 
