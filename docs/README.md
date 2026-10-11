@@ -5,6 +5,9 @@ The [library map](libraries.md) lists imports and native targets;
 [architecture](architecture.md) describes dependency boundaries and ownership.
 The [Goose pattern guide](goose-patterns.md) compares useful storage structures,
 ownership and asynchronous lifetimes, with measured costs and application limits.
+The [language comparison](goose-language-comparison.md) explains why these designs
+fit Goose and how ownership, storage and worker patterns differ from C++, Rust,
+Go and Zig.
 
 ## Library guides
 

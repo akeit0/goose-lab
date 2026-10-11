@@ -9,6 +9,9 @@ objects. Independence does not require a separate resizable value per object.
 This guide collects patterns demonstrated by the current libraries and samples.
 It separates representation/correctness evidence from speed or total-memory
 claims. The linked guides contain bounds, contracts and reproduction commands.
+The [language comparison](goose-language-comparison.md) explains the design shift
+from independently allocated objects to explicit Stores and logical identities,
+and separates language guarantees from application policy.
 
 ## Choose storage by the work
 

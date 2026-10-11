@@ -14,6 +14,8 @@ require PowerShell. Linux and macOS have not yet been validated.
 See the [documentation index](docs/README.md) for guides by area.
 The [Goose pattern guide](docs/goose-patterns.md) summarizes efficient storage,
 ownership and worker composition demonstrated by the experiments.
+The [language comparison](docs/goose-language-comparison.md) explains why these
+patterns fit Goose and how they relate to C++, Rust, Go and Zig.
 
 ## What's here
 
