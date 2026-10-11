@@ -12,24 +12,30 @@ struct Id { slot: i64 = -1, generation: u64 = 0 }
 struct Receipt { client: Id = Id {}, serial: u64 = 0, ticket: u64 = 0, sequence: u64 = 0, lane: i64 = -1 }
 struct Request { client: Id, serial: u64, ticket: u64, token: lab_io_cancel::Token }
 struct Ack<P, L> { ticket: u64, sequence: u64 }
-// P must be a fixed-size owned value. There is one page queue per P, and one
-// Service may own it. Flat variable-size payloads need a different storage policy.
+// P is the fixed owned export type and queue identity. Packet transports a
+// bounded byte image; adapters may supply a compact domain-specific codec.
 struct Page<P> { receipt: Receipt, done: bool = false, code: i32 = OK, data: P = default<P>() }
+let MAX_PACKET_BYTES: i64 = 65536;
+// Queue image: 8-byte tail count + 53 fixed receipt/status bytes + data.len.
+struct Packet<P> { receipt: Receipt, done: bool = false, code: i32 = OK, data: u8[>..] = [] }
 struct Limits { clients: i64 = 64, inflight: i64 = 64, workers: i64 = 4 }
 struct Flight { ticket: u64 = 0, client: Id = Id {}, serial: u64 = 0, next: u64 = 1, lane: i64 = -1,
     token: lab_io_cancel::Token = lab_io_cancel::Token {} }
 struct Client<P> { generation: u64 = 0, open: bool = false, serial: u64 = 0, ticket: u64 = 0,
-    cancelling: bool = false, ready: bool = false, held: bool = false, page: Page<P> = Page<P> { receipt: Receipt {} } }
+    cancelling: bool = false, ready: bool = false, held: bool = false, receipt: Receipt = Receipt {}, done: bool = false, code: i32 = OK,
+    offset: i64 = 0, bytes: i64 = 0 }
 struct Info { code: i32, serial: u64 = 0, busy: bool = false, ready: bool = false, held: bool = false, cancelling: bool = false }
 struct Stats { clients: i64 = 0, inflight: i64 = 0, ready: i64 = 0, held: i64 = 0, workers: i64 = 0,
-    submitted: i64 = 0, completed: i64 = 0, received: i64 = 0, discarded: i64 = 0, replaced: i64 = 0, acknowledgements: i64 = 0 }
+    submitted: i64 = 0, completed: i64 = 0, received: i64 = 0, discarded: i64 = 0, replaced: i64 = 0, acknowledgements: i64 = 0,
+    queue_bytes: i64 = 0, payload_bytes: i64 = 0, peak_payload_bytes: i64 = 0, exported_bytes: i64 = 0, shifted_bytes: i64 = 0 }
 struct Service<P> { code: i32 = OK, running: bool = false, limits: Limits = Limits {}, workers: i64[..8] = [],
-    next_ticket: u64 = 0, active: i64 = 0, clients: Client<P>[..64] = [], flights: Flight[64] = [Flight {}; 64], counters: Stats = Stats {} }
+    next_ticket: u64 = 0, active: i64 = 0, clients: Client<P>[..64] = [], flights: Flight[64] = [Flight {}; 64], counters: Stats = Stats {}, data: u8[>..<] = [] }
 struct Wait { code: i32, rejected: i64 = 0 }
 fn create<P>(limits: Limits = Limits {}) -> Service<P> {
     if limits.clients < 1 || limits.clients > 64 || limits.inflight < 1 || limits.inflight > 64 || limits.workers < 1 || limits.workers > 8 {
         return Service<P> { code: INVALID };
     }
+    let one = [default<P>()]; let bytes = bytes_of(one).len; if bytes + 3 > MAX_PACKET_BYTES { return Service<P> { code: INVALID }; }
     Service<P> { running: true, limits: limits }
 }
 fn valid<P>(s: const Service<P>&, id: Id) -> bool {
@@ -63,9 +69,26 @@ fn begin<P>(s: Service<P>&, id: Id) -> Request, i32 {
     s.flights[index] = Flight { ticket: c.ticket, client: id, serial: c.serial, token: token }; s.active++; s.counters.submitted++;
     return Request { id, c.serial, c.ticket, token }, OK;
 }
+fn packet<P>(page: const Page<P>&) -> Packet<P> {
+    let one = [page.data];
+    Packet<P> { page.receipt, page.done, page.code, to_bytes(one) }
+}
+fn publish_bytes<P>(request: Request, lane: i64, sequence: u64, data: const u8[:], done: bool = false, code: i32 = OK) {
+    assert(lane >= 0 && lane < 8 && sequence > 0 && data.len <= MAX_PACKET_BYTES);
+    qput(Packet<P> { Receipt { request.client, request.serial, request.ticket, sequence, lane }, done, code, data });
+}
 fn publish<P>(request: Request, lane: i64, sequence: u64, data: P, done: bool = false, code: i32 = OK) {
-    assert(lane >= 0 && lane < 8 && sequence > 0);
-    qput(Page<P> { Receipt { request.client, request.serial, request.ticket, sequence, lane }, done, code, data });
+    let one = [data]; let image = to_bytes(one); publish_bytes<P>(request, lane, sequence, image, done, code);
+}
+// Remove a ready payload and compact the single owned tail. No slices escape.
+// Held pages need only their receipt; their exported payload belongs to caller.
+fn erase<P>(s: Service<P>&, slot: i64) {
+    let at = s.clients[slot].offset; let count = s.clients[slot].bytes; if count == 0 { s.clients[slot].offset = 0; return; }
+    let data .= s.data; let shifted = data.len - at - count;
+    for i in shifted { data[at + i] = data[at + count + i]; }
+    data.resize(data.len - count); s.counters.shifted_bytes += shifted;
+    for i in s.clients.len { if s.clients[i].bytes > 0 && s.clients[i].offset > at { s.clients[i].offset -= count; } }
+    s.clients[slot].bytes = 0; s.clients[slot].offset = 0;
 }
 fn send_ack<P>(receipt: Receipt) {
     match receipt.lane {
@@ -94,8 +117,9 @@ fn await_ack<P, L>(request: Request, sequence: u64, deadline: i64) -> Wait {
         else { sleep_ms(1); }
     }
 }
-fn receive<P>(s: Service<P>&, page: const Page<P>&) {
-    s.counters.received++; let r = page.receipt; let index = flight(s, r.ticket);
+fn receive<P>(s: Service<P>&, page: const Packet<P>&) {
+    assert(page.data.len <= MAX_PACKET_BYTES);
+    s.counters.received++; s.counters.queue_bytes += 61 + page.data.len; let r = page.receipt; let index = flight(s, r.ticket);
     if index < 0 { s.counters.discarded++; return; }
     let f .= s.flights[index];
     if f.client.slot != r.client.slot || f.client.generation != r.client.generation || f.serial != r.serial ||
@@ -110,26 +134,36 @@ fn receive<P>(s: Service<P>&, page: const Page<P>&) {
     if c.cancelling && !page.done { s.counters.discarded++; return; }
     if !page.done && (c.ready || c.held) { s.counters.discarded++; return; }
     if page.done && (c.ready || c.held) { s.counters.replaced++; }
-    c.page = page; c.ready = true; c.held = false;
-    if page.done {
-        c.ticket = 0;
-        if c.cancelling { c.page.code = CANCELLED; c.page.data = default<P>(); }
-        c.cancelling = false;
-    }
+    let cancelled = c.cancelling && page.done; erase(s, r.client.slot);
+    c.receipt = r; c.done = page.done; c.code = if cancelled { CANCELLED } else { page.code }; c.ready = true; c.held = false;
+    c.offset = 0;
+    if !cancelled && page.data.len > 0 { c.offset = s.data.len; c.bytes = page.data.len; let data .= s.data; data.append(page.data); }
+    s.counters.peak_payload_bytes = max(s.counters.peak_payload_bytes, s.data.len);
+    if page.done { c.ticket = 0; c.cancelling = false; }
 }
 fn poll<P>(s: Service<P>&, maximum: i64 = 128) -> i64 {
     if !s.running || maximum <= 0 { return 0; }
-    var count: i64 = 0; while count < maximum { let page, available = qpoll<Page<P>>(); if !available { break; } receive(s, page); count++; } count
+    var count: i64 = 0; while count < maximum { let page, available = qpoll<Packet<P>>(); if !available { break; } receive(s, page); count++; } count
 }
+fn take_packet<P>(s: Service<P>&, id: Id) -> Packet<P>, i32 {
+    if !valid(s, id) { return Packet<P> { receipt: Receipt {} }, STALE; }
+    let c .= s.clients[id.slot]; if !c.ready { return Packet<P> { receipt: Receipt {} }, NOT_READY; }
+    var result = Packet<P> { c.receipt, c.done, c.code };
+    if c.bytes > 0 { result.data.append(s.data[c.offset..c.offset + c.bytes]); }
+    s.counters.exported_bytes += c.bytes; erase(s, id.slot); c.ready = false; c.held = !c.done; return result, OK;
+}
+// Default fixed-P codec; compact domain adapters use take_packet and decode.
 fn take<P>(s: Service<P>&, id: Id) -> Page<P>, i32 {
-    let empty = Page<P> { receipt: Receipt {} };
-    if !valid(s, id) { return empty, STALE; }
-    let c .= s.clients[id.slot]; if !c.ready { return empty, NOT_READY; }
-    let page = c.page; c.ready = false; c.held = !page.done; return page, OK;
+    let received, code = take_packet(s, id);
+    var page = Page<P> { received.receipt, received.done, received.code };
+    if code == OK && received.data.len > 0 {
+        let values, valid_image = from_bytes<P[>..]>(received.data); assert(valid_image && values.len == 1); page.data = values[0];
+    }
+    return page, code;
 }
 fn ack<P>(s: Service<P>&, receipt: Receipt) -> i32 {
     if !valid(s, receipt.client) { return STALE; }
-    let c .= s.clients[receipt.client.slot]; let held = c.page.receipt;
+    let c .= s.clients[receipt.client.slot]; let held = c.receipt;
     if !c.held || c.cancelling || c.ticket == 0 { return NOT_READY; }
     if c.ticket != receipt.ticket || c.serial != receipt.serial || held.sequence != receipt.sequence || held.lane != receipt.lane { return STALE; }
     let index = flight(s, receipt.ticket); assert(index >= 0 && s.flights[index].next == receipt.sequence);
@@ -139,22 +173,22 @@ fn ack<P>(s: Service<P>&, receipt: Receipt) -> i32 {
 fn discard<P>(s: Service<P>&, id: Id) -> i32 {
     if !valid(s, id) { return STALE; }
     let c .= s.clients[id.slot]; if !c.ready { return NOT_READY; }
-    let receipt = c.page.receipt; c.ready = false; c.held = !c.page.done;
+    let receipt = c.receipt; erase(s, id.slot); c.ready = false; c.held = !c.done;
     if c.held { return ack(s, receipt); } OK
 }
 fn cancel<P>(s: Service<P>&, id: Id) -> i32 {
     if !valid(s, id) { return STALE; }
     let c .= s.clients[id.slot]; if c.ticket == 0 { return NOT_READY; }
     let index = flight(s, c.ticket); assert(index >= 0 && lab_io_cancel::request(s.flights[index].token));
-    c.cancelling = true; c.ready = false; c.held = false; OK
+    erase(s, id.slot); c.cancelling = true; c.ready = false; c.held = false; OK
 }
 fn close<P>(s: Service<P>&, id: Id) -> i32 {
     if !valid(s, id) { return STALE; }
     if s.clients[id.slot].ticket != 0 { cancel(s, id); }
-    s.clients[id.slot].open = false; s.clients[id.slot].ticket = 0; s.clients[id.slot].ready = false; s.clients[id.slot].held = false; OK
+    erase(s, id.slot); s.clients[id.slot].open = false; s.clients[id.slot].ticket = 0; s.clients[id.slot].ready = false; s.clients[id.slot].held = false; OK
 }
 fn stats<P>(s: const Service<P>&) -> Stats {
-    var out = s.counters; out.inflight = s.active; out.workers = s.workers.len;
+    var out = s.counters; out.inflight = s.active; out.workers = s.workers.len; out.payload_bytes = s.data.len;
     for c in s.clients { if c.open { out.clients++; if c.ready { out.ready++; } if c.held { out.held++; } } } out
 }
 fn prepare_shutdown<P>(s: Service<P>&) {
@@ -167,7 +201,7 @@ fn prepare_shutdown<P>(s: Service<P>&) {
 fn finish_shutdown<P>(s: Service<P>&) {
     if !s.running { return; }
     for worker in s.workers { thread_wait(worker); }
-    loop { if poll(s) == 0 { break; } } assert(s.active == 0);
+    loop { if poll(s) == 0 { break; } } assert(s.active == 0 && s.data.len == 0);
     drain_lane<P, Lane0>(); drain_lane<P, Lane1>(); drain_lane<P, Lane2>(); drain_lane<P, Lane3>();
     drain_lane<P, Lane4>(); drain_lane<P, Lane5>(); drain_lane<P, Lane6>(); drain_lane<P, Lane7>();
     s.workers.resize(0); s.running = false;

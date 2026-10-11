@@ -6,6 +6,7 @@ import lab.io.stream;
 import lab.io.cancel;
 import lab.io.event_loop;
 import lab.fs.search;
+import lab.fs.search_codec;
 struct Job { stop: bool = false, request: lab_io_stream::Request = lab_io_stream::Request { lab_io_stream::Id {}, 0, 0, lab_io_cancel::Token {} },
     root: u8[..512] = [], query: u8[..512] = [], options: lab_fs_search::Options = lab_fs_search::Options {} }
 struct Service { flow: lab_io_stream::Service<lab_fs_search::Batch> = lab_io_stream::Service<lab_fs_search::Batch> {} }
@@ -15,6 +16,12 @@ fn result_code(result: i32) -> i32 {
     else if result == lab_fs_search::TIMEOUT { lab_io_stream::TIMEOUT }
     else { lab_io_stream::FAILED }
 }
+fn packet(page: const lab_io_stream::Page<lab_fs_search::Batch>&) -> lab_io_stream::Packet<lab_fs_search::Batch> {
+    lab_io_stream::Packet<lab_fs_search::Batch> { page.receipt, page.done, page.code, lab_fs_search_codec::encode(page.data) }
+}
+fn publish(request: lab_io_stream::Request, lane: i64, sequence: u64, batch: const lab_fs_search::Batch&, done: bool = false, code: i32 = 0) {
+    let encoded = lab_fs_search_codec::encode(batch); lab_io_stream::publish_bytes<lab_fs_search::Batch>(request, lane, sequence, encoded, done, code);
+}
 fn run<L>(lane: i64) {
     loop {
         lab_io_stream::drain_lane<lab_fs_search::Batch, L>();
@@ -23,7 +30,8 @@ fn run<L>(lane: i64) {
         var search = lab_fs_search::start(job.root, job.query, options);
         var sequence: u64 = 1;
         if search.code != 0 {
-            lab_io_stream::publish<lab_fs_search::Batch>(job.request, lane, sequence, lab_fs_search::Batch { done: true, result: search.code }, true, lab_io_stream::FAILED); continue;
+            let invalid = lab_fs_search::Batch { done: true, result: search.code };
+            publish(job.request, lane, sequence, invalid, true, lab_io_stream::FAILED); continue;
         }
         loop {
             var batch = lab_fs_search::poll(search, 20);
@@ -31,15 +39,15 @@ fn run<L>(lane: i64) {
             if batch.done {
                 // Close thread-owned native resources before publishing terminal.
                 assert(lab_fs_search::close(search));
-                lab_io_stream::publish<lab_fs_search::Batch>(job.request, lane, sequence, batch, true, result_code(batch.result)); break;
+                publish(job.request, lane, sequence, batch, true, result_code(batch.result)); break;
             }
             if batch.hits.len == 0 && batch.issues.len == 0 { continue; }
-            lab_io_stream::publish<lab_fs_search::Batch>(job.request, lane, sequence, batch);
+            publish(job.request, lane, sequence, batch);
             let ack = lab_io_stream::await_ack<lab_fs_search::Batch, L>(job.request, sequence, search.deadline);
             if ack.code != lab_io_stream::OK {
                 var progress = batch.progress; progress.active = 0; assert(lab_fs_search::close(search));
-                lab_io_stream::publish<lab_fs_search::Batch>(job.request, lane, sequence,
-                    lab_fs_search::Batch { done: true, result: if ack.code == lab_io_stream::CANCELLED { lab_fs_search::CANCELLED } else { lab_fs_search::TIMEOUT }, progress: progress }, true, ack.code);
+                let terminal = lab_fs_search::Batch { done: true, result: if ack.code == lab_io_stream::CANCELLED { lab_fs_search::CANCELLED } else { lab_fs_search::TIMEOUT }, progress: progress };
+                publish(job.request, lane, sequence, terminal, true, ack.code);
                 break;
             }
             sequence++;
@@ -81,7 +89,11 @@ fn start(s: Service&, id: lab_io_stream::Id, root: const u8[:], query: const u8[
     qput(Job { request: request, root: root, query: query, options: bounded }); lab_io_stream::OK
 }
 fn take(s: Service&, id: lab_io_stream::Id) -> lab_io_stream::Page<lab_fs_search::Batch>, i32 {
-    var page, code = lab_io_stream::take(s.flow, id);
+    let received, code = lab_io_stream::take_packet(s.flow, id);
+    var page = lab_io_stream::Page<lab_fs_search::Batch> { received.receipt, received.done, received.code };
+    if code == 0 && received.data.len > 0 {
+        let batch, valid = lab_fs_search_codec::decode(received.data); assert(valid); page.data = batch;
+    }
     if code == 0 && page.done {
         page.data.done = true;
         if page.code == lab_io_stream::CANCELLED { page.data.result = lab_fs_search::CANCELLED; }

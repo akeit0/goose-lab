@@ -32,7 +32,7 @@ fn races() {
     for id in [a, b, c] { assert(support_stream_producer::start(s, id, 4) == 0); }
     let ap = take(s, a); let bp = take(s, b); let cp = take(s, c);
     assert(ap.receipt.lane != bp.receipt.lane && ap.receipt.lane != cp.receipt.lane && bp.receipt.lane != cp.receipt.lane);
-    qput(ap); var altered = ap; altered.receipt.serial++; qput(altered);
+    qput(lab_io_stream::packet(ap)); var altered = ap; altered.receipt.serial++; qput(lab_io_stream::packet(altered));
     assert(lab_io_stream::poll(s) == 2 && lab_io_stream::info(s, a).held);
     var invalid_receipt = ap.receipt; invalid_receipt.lane = bp.receipt.lane;
     assert(lab_io_stream::ack(s, invalid_receipt) == lab_io_stream::STALE && lab_io_stream::info(s, a).held);
@@ -50,7 +50,7 @@ fn races() {
     let fresh, fc = lab_io_stream::open(s); assert(fc == 0 && fresh.slot == c.slot && fresh.generation != c.generation);
     assert(lab_io_stream::ack(s, cp.receipt) == lab_io_stream::STALE);
     assert(support_stream_producer::start(s, fresh, 2) == 0);
-    qput(cp); lab_io_stream::poll(s);
+    qput(lab_io_stream::packet(cp)); lab_io_stream::poll(s);
     let fp = take(s, fresh); assert(fp.receipt.client.generation == fresh.generation && fp.receipt.serial == 1);
     complete(s, fresh, fp.receipt, 2);
     // A cancelled, unread page cannot block terminal adoption. No ACK required.
@@ -66,8 +66,8 @@ fn races() {
     }
     // Real successful terminal publication already queued before cancellation.
     assert(support_stream_producer::start(s, b, 0) == 0);
-    let until = clock_ns() + 5000000000; var queued = lab_io_stream::Page<support_stream_producer::Payload> { receipt: lab_io_stream::Receipt {} };
-    loop { let page, available = qpoll<lab_io_stream::Page<support_stream_producer::Payload>>(); if available { queued = page; break; } assert(clock_ns() < until); sleep_ms(1); }
+    let until = clock_ns() + 5000000000; var queued = lab_io_stream::Packet<support_stream_producer::Payload> { receipt: lab_io_stream::Receipt {} };
+    loop { let page, available = qpoll<lab_io_stream::Packet<support_stream_producer::Payload>>(); if available { queued = copy(page); break; } assert(clock_ns() < until); sleep_ms(1); }
     assert(queued.done && queued.code == 0); qput(queued); assert(lab_io_stream::cancel(s, b) == 0);
     let converted = take(s, b); assert(converted.done && converted.code == lab_io_stream::CANCELLED);
     // A deadline releases the producer even when the consumer never takes/ACKs.
@@ -127,4 +127,42 @@ fn bounds() {
     let before = clock_ns(); support_stream_producer::shutdown(s); assert(clock_ns() - before < 2000000000);
     assert(lab_io_stream::stats(s).completed == 64 && lab_io_stream::stats(s).inflight == 0); free_tokens(); print("stream stalled-lane bounds and shutdown passed");
 }
-fn main() { races(); for count in [3, 16, 64] { many(count); } bounds(); print("Stream contracts passed"); }
+struct EmptyPayload {}
+struct HugePayload { bytes: u8[65534] }
+fn compact_storage() {
+    var empty = lab_io_stream::create<EmptyPayload>(); assert(empty.code == 0);
+    let eid, ec = lab_io_stream::open(empty); let request, rc = lab_io_stream::begin(empty, eid); assert(ec == 0 && rc == 0);
+    lab_io_stream::publish<EmptyPayload>(request, 0, 1, EmptyPayload {}, true); assert(lab_io_stream::poll(empty) == 1);
+    let ep, pc = lab_io_stream::take(empty, eid); assert(pc == 0 && ep.done);
+    lab_io_stream::prepare_shutdown(empty); lab_io_stream::finish_shutdown(empty);
+    assert(lab_io_stream::create<HugePayload>().code == lab_io_stream::INVALID);
+    var s = lab_io_stream::create<support_stream_producer::Payload>(lab_io_stream::Limits { clients: 64, workers: 1 });
+    var ids: lab_io_stream::Id[..64] = []; var requests: lab_io_stream::Request[..64] = []; var total: i64 = 0;
+    assert(lab_io_stream::stats(s).payload_bytes == 0);
+    for i in 64 {
+        let id, ic = lab_io_stream::open(s); let request, rc = lab_io_stream::begin(s, id); assert(ic == 0 && rc == 0);
+        ids.push(id); requests.push(request); var data: u8[>..] = []; data.resize(i * 7, i as u8); total += data.len;
+        lab_io_stream::publish_bytes<support_stream_producer::Payload>(request, 0, 1, data);
+    }
+    assert(lab_io_stream::poll(s) == 64 && lab_io_stream::stats(s).payload_bytes == total);
+    assert(lab_io_stream::stats(s).peak_payload_bytes == total);
+    let owned, oc = lab_io_stream::take_packet(s, ids[63]); assert(oc == 0 && owned.data.len == 441);
+    assert(lab_io_stream::ack(s, owned.receipt) == 0); total -= 441;
+    for n in 63 {
+        let i = (n * 17) % 63; let page, code = lab_io_stream::take_packet(s, ids[i]); assert(code == 0 && page.data.len == i * 7);
+        for byte in page.data { assert(byte == i as u8); } total -= i * 7;
+        assert(lab_io_stream::stats(s).payload_bytes == total && lab_io_stream::info(s, ids[i]).held);
+        assert(lab_io_stream::ack(s, page.receipt) == 0);
+        lab_io_stream::publish_bytes<support_stream_producer::Payload>(requests[i], 0, 2, "", true);
+        lab_io_stream::poll(s); // Empty terminal among other live payload ranges.
+    }
+    lab_io_stream::publish_bytes<support_stream_producer::Payload>(requests[63], 0, 2, "", true); lab_io_stream::poll(s);
+    assert(total == 0 && lab_io_stream::stats(s).payload_bytes == 0 && lab_io_stream::stats(s).inflight == 0);
+    for id in ids { let page, code = lab_io_stream::take_packet(s, id); assert(code == 0 && page.done && page.data.len == 0); }
+    lab_io_stream::prepare_shutdown(s); lab_io_stream::finish_shutdown(s);
+    assert(owned.data.len == 441); for byte in owned.data { assert(byte == 63); }
+    let stats = lab_io_stream::stats(s);
+    print("compact-storage,", stats.peak_payload_bytes, ",", stats.queue_bytes, ",", stats.exported_bytes, ",", stats.shifted_bytes);
+    free_tokens(); print("compact stream storage and owned exports passed");
+}
+fn main() { races(); for count in [3, 16, 64] { many(count); } bounds(); compact_storage(); print("Stream contracts passed"); }

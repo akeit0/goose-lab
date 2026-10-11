@@ -1,7 +1,7 @@
 # Bounded streams and independent search clients
 
 `lab.io.stream` provides host-owned routing and explicit page credit for a
-fixed-size owned payload `P`. `lab.fs.search_clients` applies it to real searches
+fixed-size owned export `P`, carried by bounded byte packets. `lab.fs.search_clients` applies it to real searches
 using `lab.fs.search::Batch`. Link `goose_lab_loop` for search, or
 `goose_lab_cancel` for a producer that needs only the stream protocol.
 
@@ -11,7 +11,7 @@ ownership per request, rather than allocating a new native token per page.
 
 ## Queue ownership and ACK routing
 
-There is one `Page<P>` queue per fixed payload type. Exactly one `Service<P>`
+There is one `Packet<P>` queue per fixed export type. Exactly one `Service<P>`
 may receive it in a program. ID/receipt copies alias that Service's client;
 they do not prove identity across owners or owner lifetimes. Do not copy the
 Service, manipulate its internal queue types, or use host methods concurrently.
@@ -114,25 +114,60 @@ fn main() {
 
 ## Bounds, native budgets and copy costs
 
-The host reserves 64 client/mailbox records and 64 Flight records even if configured
-for three clients. `P` must be fixed-size and owned; arrays of resizable payloads
-need a different representation. For search, each Batch is bounded to 32 hits and
-32 issues. Keeping fixed mailboxes makes the protocol easy to model but reserves
-space for their full capacities.
+The host reserves 64 small client/mailbox descriptors and 64 Flight records,
+even if configured for three clients. A single `u8[>..<]` tail contains only
+ready packets' encoded payloads. Poll appends an adopted payload; take copies
+its bytes to an owned export and removes its range. Held pages retain only
+receipt/status metadata. Discard, cancel, close and terminal replacement also
+remove their payload. Empty terminals do not retain stale arena offsets.
+
+Removing a range shifts all later bytes and adjusts the remaining offsets.
+This bounds fragmentation without a separate directory or native allocation,
+but can copy the rest of the arena on each removal. With many large ready pages,
+that work can outweigh the reduced queue images. The contract models 64 varied
+payload lengths, including zero, takes them in a permutation, inserts empty
+terminals between them, and independently checks 285768 shifted bytes. Owned
+exports survive later compaction and shutdown.
+
+Each packet payload is at most 65536 bytes, enforced at publication. The default
+codec uses Goose `to_bytes([value])` and verified `from_bytes<P[>..]>`, preserving
+the fixed representation, including unused array capacities. `P` must be fixed,
+owned and supported by those builtins; create rejects an image beyond the bound.
+Adapters use `publish_bytes<P>` and `take_packet<P>` for their own bounded codec.
+Do not call the default `stream::take` on a domain-specific encoded packet.
+
+Search uses [search_codec](../../lib/lab/fs/search_codec.goose): version byte,
+little-endian fields, a 60-byte Batch header, counts up to 32 hits/issues,
+16-bit string lengths, and only used path/preview bytes. Its largest encoded
+Batch is 44540 bytes. Decode checks version, boolean, counts, string capacities,
+truncation and trailing bytes; failure returns an empty Batch. It is a private
+in-process format, not a persisted file format or a replacement for search APIs.
+The worker encodes through a const Batch reference. The host's owned `Page<Batch>`
+API still returns the fixed Batch representation, so its exports are not compact.
 
 On the validated Windows x64 toolchain, generated fixed representations are:
 
 | Value | Bytes |
 | --- | ---: |
-| Search Service, including 64 mailboxes | 2859463 |
-| Search Batch | 44539 |
-| Search Page with receipt/status | 44592 |
-| Synthetic producer Service | 14663 |
+| Search Service metadata/header, excluding its byte tail | 10047 |
+| Search Batch export | 44539 |
+| Search Page export with receipt/status | 44592 |
+| Synthetic producer Service metadata/header | 10047 |
+| Search Packet header including the runtime tail header | 69 |
+| Queue image prefix, before payload bytes | 61 |
 
-These `sizeof` measurements exclude worker data/native stacks, search text/tasks,
-native handles/buffers, queued message allocation and owned exports. Queue
-packing copies the fixed page representation, including reserved array entries.
-This is not zero-copy transport or a total-memory/throughput comparison.
+The original fixed-mailbox Service reserved 2859463 bytes. The new owner starts
+with zero retained payload bytes; search ready payloads are bounded by
+`clients * 44540`, and held payloads live in caller-owned exports. Queue images
+are `61 + encoded.len` bytes, versus the old fixed 44592 bytes per search Page.
+A maximum-capacity Batch produces a 44601-byte image, nine bytes larger than the
+old representation; reduction depends on occupancy and actual string lengths.
+
+These measurements exclude allocator/node overhead, worker data/native stacks,
+search text/tasks, native handles/buffers, spare runtime stack capacity and owned
+exports. Encoding, queue packing, receipt routing, decoding and arena compaction
+still copy data. This is not zero-copy transport or a total-memory/throughput
+comparison. Arena length returning to zero does not prove process RSS decreases.
 
 Without external queue manipulation, each Flight can have at most one unACKed
 data page and one terminal, including cancellation/deadline completion. Host
@@ -158,7 +193,11 @@ resource closing stays on the worker that created the resources.
 workers, plus submitted/completed/received/discarded/replaced/ACK events.
 `completed` includes cancelled/retired jobs, and `discarded` counts unadopted
 received messages. `replaced` records a terminal superseding a ready/held page.
-These are protocol counts, not byte allocation measurements.
+Byte counters add received queue-image bytes (including stale packets), current/
+peak retained payload, exported encoded bytes and bytes shifted by compaction.
+They exclude encoder/decoder temporaries, fixed owned exports and allocator/RSS
+measurements. The Python oracle calculates exact 3/16/64 search queue bytes from
+flat-file paths/previews plus message headers, and rejects a corrupted counter.
 
 ## Verification
 
@@ -175,8 +214,11 @@ independent roots, changed generations, non-ASCII queries/columns, CRLF input,
 binary/encoding issues, limits, timeout, invalid options, missing roots and
 cancel/shutdown during ACK waiting. The [Python fixture](../../tests/stream_fixture.py)
 uses flat byte-string `find` and Unicode decoding to calculate the expected
-path, offsets, line and column. It checks 92 traced streams and 8258 matches,
-including 3/16/64 distinct roots. Cross-client corruption and truncated traces
+path, offsets, line, column, preview and issue detail. It checks 92 traced streams and 8258 matches,
+including 3/16/64 distinct roots. Codec checks round-trip the maximum Batch,
+reject every truncated prefix of a Unicode example and malformed headers/lengths,
+and compare its exact encoded bytes with independent Python `struct.pack`.
+Cross-client corruption and truncated traces
 must be rejected; cross-client completion order is unconstrained.
 
 After each search Service shutdown, the contracts reacquire all 64 cancellation
@@ -198,15 +240,15 @@ measures generated fixed layouts. A fresh output directory is required;
 failure preserves an incomplete manifest and available logs. One selected
 upstream-tracking fork is sufficient for routine validation.
 
-The clean qualification at lab `30f69f18373081e14277ade581c8e113890a957a`
+The original fixed-mailbox baseline qualification at lab `30f69f18373081e14277ade581c8e113890a957a`
 and fork `c2ecb4421facdc6476214606b67488df93eaa033` passed all nine paired runs
 (`-O0/-O1/-O2`, three repeats each), or 18 contract processes. Independent
 oracles checked 2988 producer pages, 828 real streams and 74322 flat-file
 matches; the lifecycle contracts completed 900 immediate ACK/Cancel races.
 All runs also passed bounds, typed-queue isolation and native registry
 reacquisition. Compiler, generated C/binaries, archives and 142 snapshot files
-were hash-checked; both source checkouts were clean. Fixed layouts matched the
-table above. The main Windows/MSVC Release build passed all 27 CTest checks in
+were hash-checked; both source checkouts were clean. That baseline measured
+2859463 fixed search Service bytes and 14663 fixed synthetic Service bytes. The main Windows/MSVC Release build passed all 27 CTest checks in
 90.26 seconds. Raw records and snapshots remain under ignored
 `local/references/stream/qualification-run/`; the commands above reproduce the
 public contract without those local records.
@@ -214,4 +256,4 @@ public contract without those local records.
 The existing `lab.fs.search_client` and UI integrations keep their single-client
 contract. This library is a separately verified alternative. Runtime queue
 instances, unbounded lane counts, fair multiplexing of thread-owned search
-contexts, dynamic mailbox storage and UI adoption remain separate work.
+contexts, alternative arena reuse strategies and UI adoption remain separate work.

@@ -100,7 +100,8 @@ loopback lifecycle contract at Goose `-O0/-O1/-O2` on the selected fork.
 
 [Bounded search streams](docs/io/streams.md) add explicit page ACKs on distinct
 typed worker lanes, stalled-consumer/cancellation checks and 3/16/64 real searches
-against an independent flat-file oracle. `tools/stream_qualification.py` records
+against an independent flat-file oracle. Compact byte packets and a shared
+ready-payload tail avoid reserving a full Batch per client. `tools/stream_qualification.py` records
 the selected toolchain, repeated contracts and fixed representation costs.
 
 Windows uses installed Segoe UI, Consolas and available Japanese/symbol/emoji

@@ -103,16 +103,19 @@ def main():
             r"typedef struct (lab_fs_search_clients_Service_\w+)\b",
             r"typedef struct (lab_fs_search_Batch_\w+)\b",
             r"typedef struct (lab_io_stream_Service_\w+_support_stream_producer_Payload_\w+)\b",
-            r"typedef struct (lab_io_stream_Page_\w+_lab_fs_search_Batch_\w+)\b")]
+            r"typedef struct (lab_io_stream_Page_\w+_lab_fs_search_Batch_\w+)\b",
+            r"typedef struct (lab_io_stream_Packet_\w+_lab_fs_search_Batch_\w+)\b")]
         probe = output / "layout.c"; binary = probe.with_suffix(".exe")
         probe.write_text('#define main contract_main\n#include "search_stream_contract-O1.c"\n#undef main\n'
-                         + 'int main(void) { printf("%zu,%zu,%zu,%zu\\n", '+', '.join(f"sizeof({n})" for n in names)+'); return 0; }\n', encoding="utf-8")
+                         + 'int main(void) { printf("%zu,%zu,%zu,%zu,%zu,%zu\\n", '+', '.join(f"sizeof({n})" for n in names)+f', offsetof({names[4]}, data_g) + 8); return 0; }}\n', encoding="utf-8")
         ok, log = cc.compile(probe, binary, opt=2, extra=extra, defines=links[PROGRAMS[1]]["defines"], libs=links[PROGRAMS[1]]["libraries"])
         (output / "layout.log").write_text(log, encoding="utf-8")
         if not ok:
             raise RuntimeError("Layout probe failed")
         layout = subprocess.run([str(binary)], check=True, capture_output=True, text=True, timeout=10)
-        record["fixed_bytes"] = dict(zip(("search_service", "search_batch", "producer_service", "search_page"), map(int, layout.stdout.strip().split(","))))
+        record["fixed_bytes"] = dict(zip(("search_service", "search_batch", "producer_service", "search_page", "search_packet_header", "queue_image_prefix"), map(int, layout.stdout.strip().split(","))))
+        if record["fixed_bytes"]["queue_image_prefix"] != 61:
+            raise RuntimeError("Queue byte counters do not match generated packet prefix")
         record["complete"] = True
     except Exception as error:
         record["error"] = str(error); raise

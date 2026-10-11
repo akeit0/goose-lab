@@ -2,14 +2,18 @@
 import csv
 from pathlib import Path
 import subprocess
+import struct
 import sys
 import tempfile
 
 
 def validate_producer(stdout):
     traces = {(count, client): [] for count in (3, 16, 64) for client in range(count)}
-    summaries = []
+    summaries = []; storage = None
     for row in csv.reader(stdout.splitlines()):
+        if row[0] == "compact-storage":
+            if storage is not None: raise AssertionError("Duplicate storage trace")
+            storage = tuple(map(int, row[1:])); continue
         if row[0] != "page":
             summaries.append(",".join(row)); continue
         if len(row) != 6:
@@ -24,9 +28,17 @@ def validate_producer(stdout):
     if any(values != [1, 2, 3, 4] for values in traces.values()):
         raise AssertionError("Incomplete producer stream")
     if summaries != ["stream races and typed ACK isolation passed", "many,3,passed", "many,16,passed", "many,64,passed",
-                     "stream stalled-lane bounds and shutdown passed", "Stream contracts passed"]:
+                     "stream stalled-lane bounds and shutdown passed", "compact stream storage and owned exports passed", "Stream contracts passed"]:
         raise AssertionError("Incomplete lifecycle/bounds coverage")
-    return {"clients": 83, "pages": sum(map(len, traces.values())), "ack_cancel_races": 100}
+    lengths = [i * 7 for i in range(64)]; live = list(range(64)); shifted = 0
+    for index in [63] + [(n * 17) % 63 for n in range(63)]:
+        at = live.index(index)
+        if lengths[index]: shifted += sum(lengths[i] for i in live[at + 1:])
+        live.remove(index)
+    total = sum(lengths); expected_storage = (total, total + 128 * 61, total, shifted)
+    if storage != expected_storage: raise AssertionError(f"Compact storage mismatch: {storage} expected {expected_storage}")
+    return {"clients": 83, "pages": sum(map(len, traces.values())), "ack_cancel_races": 100,
+            "compact_storage": dict(zip(("peak_payload_bytes", "queue_bytes", "exported_bytes", "shifted_bytes"), storage))}
 
 
 def files(root):
@@ -49,7 +61,9 @@ def hits(path, text, query):
         line = text[:start].count(b"\n") + 1
         line_start = text.rfind(b"\n", 0, start) + 1
         column = len(text[line_start:start].decode("utf-8")) + 1
-        result.add((path, line, column, start, start + len(query))); offset = start + 1
+        line_end = text.find(b"\n", start)
+        preview = text[line_start:line_end if line_end >= 0 else len(text)].removesuffix(b"\r").decode("utf-8")
+        result.add((path, line, column, start, start + len(query), preview)); offset = start + 1
     return result
 
 
@@ -60,7 +74,7 @@ def cases(texts):
         if partial:
             all_hits = set(sorted(all_hits, key=lambda h: h[3])[:matches])
         expected[label] = {"identity": (slot, generation, serial), "hits": all_hits,
-                           "issues": {("binary.dat", 1), ("invalid.dat", 2)} if payload else set(),
+                           "issues": {("binary.dat", 1, 0), ("invalid.dat", 2, 0)} if payload else set(),
                            "done": (slot, generation, serial, code, result, matches), "partial": partial}
     add("B", "B", 1, 1, 1); add("C", "C", 2, 1, 1); add("A2", "A", 0, 2, 1, query="日本語")
     add("B-missing", "B", 1, 1, 2, query="absent", matches=0)
@@ -76,8 +90,20 @@ def cases(texts):
 
 
 def validate_search(stdout, expected):
-    observed = {label: {"hits": set(), "issues": set(), "done": None} for label in expected}; summaries = []
+    observed = {label: {"hits": set(), "issues": set(), "done": None} for label in expected}; summaries = []; transport = {}; codec_case = None; codec_max = None
     for row in csv.reader(stdout.splitlines()):
+        if row[0] == "codec-case":
+            if codec_case is not None: raise AssertionError("Duplicate codec trace")
+            codec_case = bytes.fromhex(row[1]); continue
+        if row[0] == "codec-max":
+            if codec_max is not None: raise AssertionError("Duplicate codec bound")
+            codec_max = int(row[1]); continue
+        if row[0] == "storage":
+            label = row[1]
+            if label in transport: raise AssertionError("Duplicate search storage trace")
+            values = tuple(map(int, row[2:]))
+            if len(values) != 5: raise AssertionError("Malformed search storage trace")
+            transport[label] = dict(zip(("messages", "queue_bytes", "peak_payload_bytes", "exported_bytes", "shifted_bytes"), values)); continue
         if row[0] not in ("hit", "issue", "done"):
             summaries.append(",".join(row)); continue
         kind, label, *values = row
@@ -87,12 +113,12 @@ def validate_search(stdout, expected):
         if item["done"] is not None:
             raise AssertionError("Data after terminal or duplicate terminal")
         if kind == "hit":
-            identity = tuple(map(int, values[:3])); hit = (values[3], *map(int, values[4:]))
+            identity = tuple(map(int, values[:3])); hit = (values[3], *map(int, values[4:8]), values[8])
             if identity != model["identity"] or hit not in model["hits"] or hit in item["hits"]:
                 raise AssertionError(f"Misrouted, duplicate or incorrect flat-file match: {row}")
             item["hits"].add(hit)
         elif kind == "issue":
-            issue = values[0], int(values[1])
+            issue = values[0], int(values[1]), int(values[2])
             if issue not in model["issues"] or issue in item["issues"]:
                 raise AssertionError(f"Unknown or duplicate file issue: {row}")
             item["issues"].add(issue)
@@ -104,9 +130,33 @@ def validate_search(stdout, expected):
         item = observed[label]
         if item["hits"] != model["hits"] or item["done"] != model["done"] or (not model["partial"] and item["issues"] != model["issues"]):
             raise AssertionError(f"Incomplete search coverage: {label}")
-    if summaries != ["real search lifetimes and native cleanup passed", "search-many,3,passed", "search-many,16,passed", "search-many,64,passed", "Search stream contracts passed"]:
+    if summaries != ["compact search codec and atomic rejection passed", "real search lifetimes and native cleanup passed", "search-many,3,passed", "search-many,16,passed", "search-many,64,passed", "Search stream contracts passed"]:
         raise AssertionError("Incomplete native/lifecycle coverage")
-    return {"streams": len(expected), "matches": sum(len(x["hits"]) for x in observed.values())}
+    framed_text = lambda text: struct.pack("<H", len(text.encode("utf-8"))) + text.encode("utf-8")
+    golden = struct.pack("<BiBi6qBB", 1, -9, 1, -1, -(2**63), 2**63-1, 3, 4, 5, 6, 1, 1)
+    golden += framed_text("dir/日本語.txt") + struct.pack("<4q", 7, 8, 9, 10) + framed_text("needle 日本語")
+    golden += framed_text("invalid.dat") + struct.pack("<2i", 2, -123)
+    if codec_case != golden or codec_max != 60 + 32*(36+512+320) + 32*(10+512):
+        raise AssertionError("Search codec disagrees with independent byte layout")
+    if set(transport) != {"lifetimes", "many-3", "many-16", "many-64"}:
+        raise AssertionError("Missing storage measurement")
+    for label, counters in transport.items():
+        count = 3 if label == "lifetimes" else int(label.removeprefix("many-"))
+        messages, size = counters["messages"], counters["queue_bytes"]
+        if messages < count or not 61*messages <= size < 44592*messages or not 0 <= counters["peak_payload_bytes"] <= count*44540:
+            raise AssertionError("Queue/retained payload bounds failed")
+        if not 0 <= counters["exported_bytes"] <= size or counters["shifted_bytes"] < 0:
+            raise AssertionError("Invalid copy counters")
+        counters["fixed_page_equivalent_bytes"] = messages * 44592
+        if label != "lifetimes":
+            encoded_content = 0
+            for client in range(count):
+                model = expected[f"{label}-{client}"]
+                encoded_content += sum(36 + len(h[0].encode("utf-8")) + len(h[5].encode("utf-8")) for h in model["hits"])
+                encoded_content += sum(10 + len(issue[0].encode("utf-8")) for issue in model["issues"])
+            if size != messages * 121 + encoded_content:
+                raise AssertionError("Search queue byte count disagrees with flat-file oracle")
+    return {"streams": len(expected), "matches": sum(len(x["hits"]) for x in observed.values()), "transport": transport}
 
 
 def capture(command, prefix=None):
@@ -136,6 +186,11 @@ def run(producer, search, logs=None):
         search_result = validate_search(second.stdout, expected)
         rejects(lambda text: validate_search(text, expected), second.stdout.replace("data-B.txt", "data-A.txt", 1))
         rejects(lambda text: validate_search(text, expected), "\n".join(second.stdout.splitlines()[:-1]))
+        rows = second.stdout.splitlines()
+        for index, line in enumerate(rows):
+            if line.startswith("storage,many-3,"):
+                row = line.split(","); row[3] = str(int(row[3]) + 1); rows[index] = ",".join(row); break
+        rejects(lambda text: validate_search(text, expected), "\n".join(rows))
     print(f"Stream oracles passed: {producer_result['pages']} producer pages; {search_result['streams']} real streams, {search_result['matches']} flat-file matches")
     return first, second, producer_result, search_result
 

@@ -82,11 +82,17 @@ eight concrete worker entry points specialize distinct `Ack<Payload, Lane>`
 types. This prevents a foreign worker from consuming an ACK, while tickets and
 sequences reject old messages. It covers 3/16/64 clients, held consumers,
 ACK/Cancel races, close/reopen and native-resource cleanup with real search data.
-Goose/native API changes were unnecessary. The resulting search Service reserves
-2859463 fixed bytes for 64 full-capacity mailboxes, and the lane count is static.
-The native read registry's 16-slot quota also requires a per-worker read budget.
-These are concrete library composition/storage costs; dynamic queue addressing,
-fair multiplexing and compact mailboxes remain separate investigations.
+Goose/native API changes were unnecessary. The initial search Service reserved
+2859463 fixed bytes for 64 full-capacity mailboxes. Encoding used fields into a
+flat byte packet and storing only ready payloads in one grow-shrink tail reduces
+the fixed metadata/header to 10047 bytes. The independent oracle checks actual
+queue bytes, previews and codec layout as well as result positions. Removal now
+shifts later arena bytes; full-capacity packets can be nine bytes larger than the
+old image, and owned exports remain fixed-size. This proves a representation
+choice, not a universal throughput/RSS improvement. The lane count remains static
+and the native 16-read quota still needs per-worker budgeting. Dynamic queue
+addressing, fair multiplexing and different arena reuse policies remain separate
+investigations.
 
 Variable-size values make accidental full-document copies expensive. A piece tree,
 byte arenas and bounded Undo records keep editing independent of a contiguous
