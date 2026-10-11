@@ -22,7 +22,7 @@ application must express. [Measured costs](goose-patterns.md) and
 | Rust | A container of `Document { text: Vec<u8>, ... }`; `Box` when separate placement is useful | Moves and `Drop` express ownership; borrowing checks lifetime and mutable exclusivity. `Arc` adds shared ownership when needed, with synchronization for shared mutation. [Ownership](https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html), [borrowing](https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html), [Vec](https://doc.rust-lang.org/std/vec/struct.Vec.html), [Arc](https://doc.rust-lang.org/std/sync/struct.Arc.html) |
 | Go | Document records with slices, possibly reached through pointers/maps | Slices can share backing arrays; assignment does not copy their payload. GC manages unreachable heap memory, with a CPU/memory tradeoff. Application close/cancellation and stale-result rules still need explicit behavior. [Slice semantics](https://go.dev/ref/spec#Slice_types), [GC guide](https://go.dev/doc/gc-guide) |
 | Zig | Document records with buffers managed through a caller-selected allocator | Allocation strategy, ownership and cleanup are explicit; valid pointer/slice lifetimes remain the programmer's responsibility. An arena or fixed buffer can be selected when it fits the workload. [Memory and ownership](https://ziglang.org/documentation/master/#Memory) |
-| Goose | Fixed document descriptors referring to shared payload/history storage in an explicit Store | Placement and reference-root rules check memory lifetime; the Store manages logical open/close, generation IDs and storage reuse. Native close and asynchronous retirement are explicit. [Validated specification](https://github.com/akeit0/goose/blob/71e848d732362a47ee7fe000a3e1601d0196259a/docs/goose_spec.md), §§3.4, 4, 5.4, 9, 11.2 |
+| Goose | Fixed document descriptors referring to shared payload/history storage in an explicit Store | Placement and reference-root rules check memory lifetime; the Store manages logical open/close, generation IDs and storage reuse. Native close and asynchronous retirement are explicit. [Upstream specification](https://github.com/aardappel/goose/blob/4f23f22629a34d971adbd8c10017d203ab6bb2fa/docs/goose_spec.md), §§3.4, 4, 5.4, 9, 11.2 |
 
 These are possible starting points, not mandatory styles or performance rankings.
 RAII does not require one allocation per object, Rust does not require `Arc` for
@@ -45,7 +45,7 @@ Goose stores values inline. A resizable part must be the tail of its containing
 value, and array elements cannot themselves be resizable. Immutable variable-size
 records are a different case: Goose can store them inline in a sequential array.
 The restriction concerns independent ongoing growth, not the ability to represent
-nested data. See the [specification](https://github.com/akeit0/goose/blob/71e848d732362a47ee7fe000a3e1601d0196259a/docs/goose_spec.md),
+nested data. See the [specification](https://github.com/aardappel/goose/blob/4f23f22629a34d971adbd8c10017d203ab6bb2fa/docs/goose_spec.md),
 §§3.3–3.4.
 
 For resident editable documents, place logical records in a bounded table and
@@ -67,7 +67,7 @@ Goose's normal grow-only arrays grow in place within compiler-assigned data-stac
 regions. Existing references survive that growth. Fresh results are constructed
 at their destination; copying an already constructed payload is a different
 operation. Fixed-size values, including large bounded arrays, can still copy
-implicitly. See the [specification](https://github.com/akeit0/goose/blob/71e848d732362a47ee7fe000a3e1601d0196259a/docs/goose_spec.md),
+implicitly. See the [specification](https://github.com/aardappel/goose/blob/4f23f22629a34d971adbd8c10017d203ab6bb2fa/docs/goose_spec.md),
 §§4.1–4.3, 5.1 and 10.
 
 This removes the need to choose a general allocator for each ordinary Goose
@@ -139,7 +139,7 @@ instance and checks reference roots and valid typed storage instead. Mutable
 state is not shared between Goose workers. This is a different set of constraints,
 not removal of lifetime checking.
 [Rust borrowing](https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html),
-[Goose specification](https://github.com/akeit0/goose/blob/71e848d732362a47ee7fe000a3e1601d0196259a/docs/goose_spec.md),
+[Goose specification](https://github.com/aardappel/goose/blob/4f23f22629a34d971adbd8c10017d203ab6bb2fa/docs/goose_spec.md),
 §§9.1–9.4 and 11.2.
 
 A reference into a Goose reusable slot can remain memory-safe after that slot
@@ -173,7 +173,7 @@ document Store. This encourages an explicit request/result protocol and limits
 shared-memory coordination inside Goose code. Runtime queue internals and native
 libraries can still use synchronization; copied integer native handles can still
 alias the same external resource.
-[Goose specification](https://github.com/akeit0/goose/blob/71e848d732362a47ee7fe000a3e1601d0196259a/docs/goose_spec.md), §11.2.
+[Goose specification](https://github.com/aardappel/goose/blob/4f23f22629a34d971adbd8c10017d203ab6bb2fa/docs/goose_spec.md), §11.2.
 
 Typed routing also has a cost. Queues are selected by message type, rather than
 by an arbitrary runtime queue object. Two Services consuming the same protocol
