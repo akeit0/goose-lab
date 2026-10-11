@@ -184,6 +184,7 @@ the public contract without those local files.
 This validates a shared-owner library for independently lived HTTP clients.
 It does not supply runtime-addressed queue instances, multiple concurrent Service
 owners, streaming result acknowledgements or Workbench/API Browser integration.
-Search/Git worker adapters still follow their existing single-client contracts.
-Those are separate follow-up experiments, not reasons to change Goose based on
-this HTTP result alone.
+The separate [stream/search adapter](streams.md) now tests explicit page credit
+and typed ACK lanes. Existing search/Git UI integrations keep their single-client
+contracts. UI adoption and multiple Service owners remain separate experiments,
+not reasons to change Goose based on this HTTP result alone.

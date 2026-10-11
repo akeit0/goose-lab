@@ -198,6 +198,19 @@ measures generated fixed layouts. A fresh output directory is required;
 failure preserves an incomplete manifest and available logs. One selected
 upstream-tracking fork is sufficient for routine validation.
 
+The clean qualification at lab `30f69f18373081e14277ade581c8e113890a957a`
+and fork `c2ecb4421facdc6476214606b67488df93eaa033` passed all nine paired runs
+(`-O0/-O1/-O2`, three repeats each), or 18 contract processes. Independent
+oracles checked 2988 producer pages, 828 real streams and 74322 flat-file
+matches; the lifecycle contracts completed 900 immediate ACK/Cancel races.
+All runs also passed bounds, typed-queue isolation and native registry
+reacquisition. Compiler, generated C/binaries, archives and 142 snapshot files
+were hash-checked; both source checkouts were clean. Fixed layouts matched the
+table above. The main Windows/MSVC Release build passed all 27 CTest checks in
+90.26 seconds. Raw records and snapshots remain under ignored
+`local/references/stream/qualification-run/`; the commands above reproduce the
+public contract without those local records.
+
 The existing `lab.fs.search_client` and UI integrations keep their single-client
 contract. This library is a separately verified alternative. Runtime queue
 instances, unbounded lane counts, fair multiplexing of thread-owned search
