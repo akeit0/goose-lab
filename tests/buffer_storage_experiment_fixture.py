@@ -20,23 +20,25 @@ def main():
                    "--rounds", "5", "--workload", "mixed", "--workload", "churn", "--repeats", "1", "--output", str(output)]
         subprocess.run(command, check=True, timeout=30)
         record = json.loads((output / "results.json").read_text(encoding="utf-8"))
-        assert record["complete"] and len(record["cases"]) == 8
+        assert record["complete"] and record["schema_version"] == 2 and len(record["cases"]) == 12
+        assert record["indexed_metadata"]["raw_entry_bytes"] == 147456
+        assert record["toolchains"][0]["indexed_program_sha256"]
         assert all(len(value) == 64 for value in record["source_sha256"].values())
         assert len(record["toolchains"][0]["revision"]) == 40
         for case in record["cases"]:
             data = module.read_rows(output / case["raw_csv"], case["documents"], 32, 5, 64, case["workload"], case["mode"])
             end = case["final"]
             assert end["capacity_bytes"] == end["logical_bytes"] == end["live_runs"] == end["metadata_live_slots"] == 0
-            if case["mode"] == "chunked":
+            if case["mode"] in ("chunked", "indexed"):
                 assert end["moved_capacity_bytes"] == end["realloc_calls"] == 0
                 assert end["alloc_calls"] == end["free_calls"] > 0
-                assert end["address_visits"] > end["read_calls"]
+                assert (end["address_visits"] > end["read_calls"]) if case["mode"] == "chunked" else (end["address_visits"] == end["read_calls"])
             else:
                 assert end["alloc_calls"] == end["metadata_high_water_slots"] == 0
                 assert end["address_visits"] == end["read_calls"]
             if case["workload"] == "churn":
                 assert "reopened_end" in case["checkpoints"] and "retired_end" in case["checkpoints"]
-                if case["mode"] == "chunked":
+                if case["mode"] in ("chunked", "indexed"):
                     # Reopen half-size buffers in reused descriptor slots, keeping the peak fixed.
                     assert end["metadata_high_water_slots"] == case["checkpoints"]["growth_end"]["metadata_live_slots"]
             # A truncated trace and altered work must not become a successful record.
@@ -63,6 +65,9 @@ def main():
         result = subprocess.run(bound, capture_output=True, text=True, timeout=15)
         assert result.returncode != 0 and "metadata envelope exceeds 4096" in result.stderr
         assert not rejected.exists()
+        directory = [sys.executable, script, "--build", build, "--documents", "1", "--chunk-bytes", "128", "--output", str(rejected)]
+        result = subprocess.run(directory, capture_output=True, text=True, timeout=15)
+        assert result.returncode != 0 and "directory envelope exceeds" in result.stderr and not rejected.exists()
 
 
 if __name__ == "__main__":

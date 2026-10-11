@@ -38,6 +38,16 @@ chunked and pooled-tree representations before attributing these costs to a
 missing move facility or requesting independent dynamic stacks. Pool reuse
 does not itself release committed memory to the OS.
 
+The [indexed byte-buffer library](buffer/indexed.md) now supplies an explicit
+caller-owned Store with fixed chunk directories and one grow-only byte arena.
+Library freelists keep independently lived buffers in that owner without exposing
+pool names, native allocations or raw borrowed slices. Generation IDs reject
+closed/reused slots; complete byte/chunk-quota checks precede mutation. Multiple
+Stores remain separate local owners. Direct lookup trades chain traversal for
+147,456 raw bytes of reserved directory/freelist entries per Store, even when
+few buffers are open. This tests an existing-Goose library alternative; it does
+not yet add edit sharing, persistent Undo or OS-memory release.
+
 ## Values and worker boundaries
 
 Typed queues and isolated workers fit HTTP requests, Git jobs and search results

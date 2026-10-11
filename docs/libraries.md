@@ -37,6 +37,11 @@ provided by the linked targets. See [architecture](architecture.md#native-code).
 
 ## Ownership and execution
 
+[`lab.buffer.indexed`](../lib/lab/buffer/indexed.goose) provides independent
+generation-checked byte buffers in an explicit caller-owned Store, using a chunk
+directory and library freelist. It needs no native target; see
+[indexed buffers](buffer/indexed.md) for bounds, ownership and representation costs.
+
 Use owned arrays for stored/queued data and borrowed slices for synchronous calls.
 Never retain pointers into Goose values in native state. Configure font families
 before measurement seals them. Close dependent layouts before their font family.

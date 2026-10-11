@@ -9,6 +9,7 @@ The [library map](libraries.md) lists imports and native targets;
 | Area | Guides |
 | --- | --- |
 | Data | [JSON parsing/writing](data/json.md), [JSON files](data/json-files.md), [field editing](data/json-edit.md) |
+| Buffers | [Indexed byte storage](buffer/indexed.md): explicit Stores, independent lifetimes, direct lookup and bounded refusal |
 | I/O | [Event loop and processes](io/io-core.md), [cancellation](io/cancellation.md), [process stdin/framing](io/process-input.md) |
 | Files | [Asynchronous reads/listings](io/async-files.md), [atomic saves](io/atomic-save.md), [watching/reconciliation](io/file-watching.md) |
 | UI authoring | [Composition](ui/ui-composition.md), [Clay layout](ui/layout.md), [scrolling/lists](ui/scrolling.md), [tree view](ui/tree-view.md), [commands/modals](ui/command-palette.md) |
@@ -32,8 +33,9 @@ The [library map](libraries.md) lists imports and native targets;
   slice-pool ownership, correctness and reproducible time/storage comparisons.
 - [Goose pool runtime experiments](experiments/pool-runtime.md): the same minimal
   source on upstream/fork, growth policies, stale views and a compiler diagnostic.
-- [Buffer storage experiments](experiments/buffer-storage.md): geometric runs and
-  fixed chunks under mixed growth, non-LIFO retirement and reopening.
+- [Buffer storage experiments](experiments/buffer-storage.md): geometric runs,
+  linked pool chunks and the indexed Goose library under mixed growth, non-LIFO
+  retirement and reopening.
 
 Library guides describe current APIs, ownership, errors and limits. Application
 guides describe complete workflows and their domain-specific rules. Put shared

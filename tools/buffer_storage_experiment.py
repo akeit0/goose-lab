@@ -19,7 +19,7 @@ FIELDS = ["phase", "operation", "elapsed_ns", "logical_bytes", "capacity_bytes",
 UNTIMED = {"append_reserved", "growth_end", "retired_end", "reopened_end", "cleanup_end"}
 
 
-def envelope(count, step, rounds, chunk_size, workload):
+def envelope(count, step, rounds, chunk_size, workload, indexed=False):
     maximum = step * rounds * (1 if workload == "uniform" else 5)
     reopened = (count + 1) // 2 if workload == "churn" else 0
     work_bound = count * maximum + reopened * step * max(1, rounds // 2) * 5
@@ -27,6 +27,8 @@ def envelope(count, step, rounds, chunk_size, workload):
         raise ValueError("Pessimistic allocation trace bound exceeds 128 MiB")
     if count * ((maximum + chunk_size - 1) // chunk_size) > 4096:
         raise ValueError("Chunk metadata envelope exceeds 4096 slots")
+    if indexed and (maximum > 2097152 or (maximum + chunk_size - 1) // chunk_size > 512):
+        raise ValueError("Indexed buffer byte/directory envelope exceeds library limits")
 
 
 def expected_trace(count, step, rounds, chunk_size, workload, mode):
@@ -35,7 +37,7 @@ def expected_trace(count, step, rounds, chunk_size, workload, mode):
     capacities = [0] * count
     counters = dict.fromkeys(["zeroed_bytes", "application_write_bytes", "alloc_calls", "realloc_calls",
                               "free_calls", "metadata_high_water_slots", "read_calls", "address_visits"], 0)
-    chunked = mode == "chunked"
+    chunked = mode in ("chunked", "indexed")
 
     def state(phase, operation):
         live = sum(capacity // chunk_size if chunked else int(capacity > 0) for capacity in capacities)
@@ -62,12 +64,14 @@ def expected_trace(count, step, rounds, chunk_size, workload, mode):
         used[index] = required
         capacities[index] = target
         counters["application_write_bytes"] += size
+        if mode == "indexed":
+            operation = "append_library"
         return state(phase, operation)
 
     def close(index, phase):
         counters["free_calls"] += capacities[index] // chunk_size if chunked else int(capacities[index] > 0)
         used[index] = capacities[index] = 0
-        return state(phase, "close")
+        return state(phase, "close_library" if mode == "indexed" else "close")
 
     def read(phase):
         for index, size in enumerate(used):
@@ -75,7 +79,7 @@ def expected_trace(count, step, rounds, chunk_size, workload, mode):
                 for sample in range(64):
                     offset = (sample * 7919 + index * 101) % size
                     counters["read_calls"] += 1
-                    counters["address_visits"] += offset // chunk_size + 1 if chunked else 1
+                    counters["address_visits"] += offset // chunk_size + 1 if mode == "chunked" else 1
         return state(phase, "read_probe")
 
     for round_ in range(rounds):
@@ -96,7 +100,7 @@ def expected_trace(count, step, rounds, chunk_size, workload, mode):
         for index in range(parity, count, 2):
             yield close(index, "cleanup")
     yield state("cleanup", "cleanup_end")
-    yield state("cleanup", "reuse_probe")
+    yield state("cleanup", "reuse_library" if mode == "indexed" else "reuse_probe")
 
 
 def read_rows(path, count, step, rounds, chunk_size, workload, mode):
@@ -122,7 +126,7 @@ def read_rows(path, count, step, rounds, chunk_size, workload, mode):
                 raise ValueError("Inconsistent pool free-storage accounting")
             if data and (row["high_water_bytes"] < data[-1]["high_water_bytes"] or row["moved_capacity_bytes"] < data[-1]["moved_capacity_bytes"]):
                 raise ValueError("High-water or copy counter went backwards")
-            if mode == "chunked" and row["moved_capacity_bytes"] != 0:
+            if mode in ("chunked", "indexed") and row["moved_capacity_bytes"] != 0:
                 raise ValueError("A fixed chunk reported relocation")
             data.append(row)
     expected = list(expected_trace(count, step, rounds, chunk_size, workload, mode))
@@ -142,6 +146,7 @@ def main():
     parser.add_argument("--configuration", default="Release")
     parser.add_argument("--documents", type=int, action="append", choices=range(1, 65))
     parser.add_argument("--workload", action="append", choices=("uniform", "mixed", "churn"))
+    parser.add_argument("--mode", action="append", choices=("geometric", "chunked", "indexed"))
     parser.add_argument("--chunk-bytes", type=int, action="append")
     parser.add_argument("--step", type=int, default=256)
     parser.add_argument("--rounds", type=int, default=64)
@@ -152,13 +157,14 @@ def main():
     counts = list(dict.fromkeys(args.documents or [3, 16, 64]))
     workloads = list(dict.fromkeys(args.workload or ["uniform", "mixed", "churn"]))
     sizes = list(dict.fromkeys(args.chunk_bytes or [4096]))
+    modes = list(dict.fromkeys(args.mode or ["geometric", "chunked", "indexed"]))
     if not (1 <= args.step <= 65536 and 1 <= args.rounds <= 256 and 1 <= args.repeats <= 100 and args.timeout > 0 and all(1 <= size <= 65536 for size in sizes)):
         parser.error("Invalid workload bounds")
     try:
         for count in counts:
             for size in sizes:
                 for workload in workloads:
-                    envelope(count, args.step, args.rounds, size, workload)
+                    envelope(count, args.step, args.rounds, size, workload, "indexed" in modes)
     except ValueError as error:
         parser.error(str(error))
     source = ROOT / "tools/experiments/runtime/buffer_storage.goose"
@@ -171,13 +177,20 @@ def main():
         values = cache(build)
         checkout = Path(values["GOOSE_SOURCE_DIR"])
         compiler = executable(build / "goose", args.configuration, "goose")
+        indexed_program = executable(build, args.configuration, "indexed_buffer") if "indexed" in modes else None
+        if indexed_program and any(path.stat().st_mtime_ns > indexed_program.stat().st_mtime_ns for path in
+                                   [source.with_name("indexed_buffer.goose"), ROOT / "lib/lab/buffer/indexed.goose"]):
+            raise RuntimeError(f"Rebuild {indexed_program} before recording modified library sources")
         toolchains.append({"label": f"toolchain-{index + 1}", "build": str(build), "checkout": str(checkout),
                            **revision(checkout), "program": str(program), "program_sha256": digest(program),
                            "compiler_sha256": digest(compiler), "configuration": args.configuration,
+                           "indexed_program": str(indexed_program) if indexed_program else None,
+                           "indexed_program_sha256": digest(indexed_program) if indexed_program else None,
                            "cmake": {key: value for key, value in values.items() if key.startswith(("CMAKE_C_COMPILER", "CMAKE_C_FLAGS", "CMAKE_CXX_COMPILER", "CMAKE_CXX_FLAGS", "GOOSE_")) or key == "CMAKE_GENERATOR"}})
     output = Path(args.output).resolve() if args.output else Path(args.build[0]).resolve() / "experiments" / datetime.now(timezone.utc).strftime("storage-%Y%m%dT%H%M%S.%fZ")
     output.mkdir(parents=True, exist_ok=False)
-    sources = [source, source.with_name("CMakeLists.txt"), Path(__file__).resolve(), ROOT / "tests/buffer_storage_experiment_fixture.py",
+    sources = [source, source.with_name("indexed_buffer.goose"), ROOT / "lib/lab/buffer/indexed.goose", ROOT / "tests/indexed_buffer_contract.goose",
+               source.with_name("CMakeLists.txt"), Path(__file__).resolve(), ROOT / "tests/buffer_storage_experiment_fixture.py",
                ROOT / "tools/document_experiment.py", ROOT / "tools/profile.py", ROOT / "tools/run.py"]
     for path in sources:
         target = output / "sources" / path.relative_to(ROOT)
@@ -186,20 +199,25 @@ def main():
     (output / "lab.diff.patch").write_text(git(ROOT, "diff", "HEAD", "--no-ext-diff") + "\n", encoding="utf-8")
     for toolchain in toolchains:
         (output / f"{toolchain['label']}.diff.patch").write_text(git(Path(toolchain["checkout"]), "diff", "HEAD", "--no-ext-diff") + "\n", encoding="utf-8")
-    record = {"schema_version": 1, "started_utc": datetime.now(timezone.utc).isoformat(), "lab": revision(ROOT),
+    record = {"schema_version": 2, "started_utc": datetime.now(timezone.utc).isoformat(), "lab": revision(ROOT),
               "hypothesis": "Fixed chunks avoid payload relocation at the cost of metadata and addressing work using existing Goose.",
-              "comparison": "Geometric runs vs linked fixed chunks; equal deterministic append/read/retire/reopen operations.",
+              "comparison": "Geometric runs, linked pool chunks and the indexed Goose library; equal deterministic payload/read/lifetime operations.",
               "source_sha256": {str(path.relative_to(ROOT)): digest(path) for path in sources},
               "environment": {"platform": platform.platform(), "machine": platform.machine(), "python": sys.version},
-              "toolchains": toolchains, "cases": [], "timing_summary": {}, "complete": False,
+              "toolchains": toolchains, "modes": modes, "cases": [], "timing_summary": {}, "complete": False,
+              "indexed_metadata": {"reserved_directory_entries": 32768, "reserved_freelist_entries": 4096,
+                                   "entry_type": "i32", "raw_entry_bytes": 147456,
+                                   "limits": "Counts exclude buffer fields, array length headers and native padding."},
               "measurement_limits": [
                   "Allocator durations sum only native allocation/reallocation/free calls; bookkeeping, validation, writes and CSV are excluded.",
+                  "Indexed append_library/close_library/reuse_library time the complete library operation, including writes/metadata. They are distinct from control allocator-only timings and cannot be compared as allocator latency.",
                   "Read probes include addressing, visit counters and assertions for 64 deterministic reads per live buffer; they are not allocator measurements.",
                   "Moved bytes are inferred from relocation and old capacity; zeroed bytes count logical initialization volume.",
-                  "Metadata is counted in slots, not native bytes. Both modes share a binary with the fixed 4096-slot table; RSS does not isolate its overhead.",
-                  "Chunk addressing follows linked descriptors. An indexed table/tree may change this cost and is not implemented here.",
+                  "Control metadata is counted in slots, not native bytes. Geometric and linked controls share a binary with the fixed 4096-slot table; RSS does not isolate its overhead.",
+                  "The geometric/linked controls share their binary. The indexed library has a separate binary and explicit Store with fixed directory/freelist capacity; its reserved entries are recorded independently of live chunk slots.",
+                  "The indexed library uses a grow-only arena and a library freelist rather than runtime alloc_slice. Counters count logical chunk allocation/release, not native pool calls.",
                   "Counters cover growth, close and reopening, but exclude the final full-pool reuse probe.",
-                  "No flattening to a contiguous consumer, document Undo, recoverable allocation or OS-memory release is tested."]}
+                  "Owned export is covered by the library contract, not a timed equal-work contiguous-consumer benchmark. No document Undo, recoverable OS allocation or OS-memory release is tested."]}
     manifest = output / "results.json"
     def save():
         manifest.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -209,12 +227,13 @@ def main():
             for count in counts:
                 for size in sizes:
                     for workload in workloads:
-                        for mode in ("geometric", "chunked"):
+                        for mode in modes:
                             name = f"{toolchain['label']}-{mode}-{workload}-{count}-{size}"
                             observations = []
                             for repeat in range(args.repeats):
                                 stem = output / f"{name}-{repeat + 1}"
-                                command = [toolchain["program"], mode, str(count), str(args.step), str(args.rounds), str(size), workload]
+                                program = toolchain["indexed_program"] if mode == "indexed" else toolchain["program"]
+                                command = [program, mode, str(count), str(args.step), str(args.rounds), str(size), workload]
                                 measurement = run(command, stem.with_suffix(".csv"), stem.with_suffix(".err"), args.timeout)
                                 data = read_rows(stem.with_suffix(".csv"), count, args.step, args.rounds, size, workload, mode)
                                 observations.extend(data)
@@ -226,7 +245,7 @@ def main():
                                                         "final": data[-1], **measurement})
                                 save()
                             summary = {}
-                            for operation in ("append_alloc", "append_realloc", "close", "read_probe", "reuse_probe"):
+                            for operation in ("append_alloc", "append_realloc", "close", "read_probe", "reuse_probe", "append_library", "close_library", "reuse_library"):
                                 timings = [row["elapsed_ns"] for row in observations if row["operation"] == operation]
                                 summary[operation] = {"samples": len(timings), "total_ns": sum(timings),
                                                       **({key: percentile(timings, fraction) for key, fraction in (("median_ns", .5), ("p95_ns", .95), ("p99_ns", .99))} if timings else {})}

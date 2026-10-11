@@ -23,8 +23,8 @@ cmake --build build-core --config Release --parallel
 ctest --test-dir build-core -C Release --output-on-failure
 ```
 
-With samples and tests enabled, the GUI configuration registers 23 checks and
-the GUI-free configuration registers 10. Enabling manual tools adds the
+With samples and tests enabled, the GUI configuration registers 24 checks and
+the GUI-free configuration registers 11. Enabling manual tools adds the
 `document_experiment_smoke` check. Tests use loopback HTTP/TLS fixtures,
 temporary Git repositories and temporary files. Python fixtures do not contact
 public services. The checked-in TLS key is only a localhost test fixture.
@@ -38,6 +38,7 @@ still requires a working GPU/backend; it is not a software renderer.
 | Check sources | Main coverage |
 | --- | --- |
 | [Utility contract](../tests/utils_contract.goose) | Piece-tree edits against a flat-string oracle, live-root collection, Unicode boundaries and pure utilities |
+| [Indexed buffer contract](../tests/indexed_buffer_contract.goose) | 3/16/64 independent byte buffers, 900-operation flat-array oracle per count, scoped generation IDs, two Stores, whole-request quota refusal and owned exports |
 | [Independent document contract](../tests/multi_document_contract.goose) | 3/16/64 pooled documents, independent Undo/selection/saved state, actual save success/failure, stale generations, budgets and 700-operation model comparison |
 | [HTTP fixture](../tests/http_fixture.py), [native cancellation](../tests/cancel_contract.c) | TLS/redirect/byte limits, cancellation and handle lifetimes |
 | [JSON corpus](../tests/json_corpus.py) | Independent decoding, round trips and malformed/bounded inputs |

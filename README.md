@@ -23,7 +23,7 @@ See the [documentation index](docs/README.md) for guides by area.
 | Git/search | Status, diffs, history, batch object reads, file search, lazy file trees | [Git viewer](docs/apps/git-viewer.md) |
 | UI | Clay layout, GPU scene, shaped text, color emoji, fields, IME, virtual lists, modals | [UI composition](docs/ui/ui-composition.md) |
 
-Reusable Goose code is grouped under `lib/lab`: `text`, `collections`, `json`,
+Reusable Goose code is grouped under `lib/lab`: `buffer`, `text`, `collections`, `json`,
 `io`, `fs`, `net`, `git`, `document` and `ui`. UI has separate layout, input,
 render, controls, views and overlays. Import paths mirror files:
 `import lab.net.http;` uses namespace `lab_net_http`.

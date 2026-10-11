@@ -24,6 +24,9 @@ python tools/pool_runtime_experiment.py --build build-pool-fork
 ```
 
 Optional native modules and JIT are disabled. No renderer or lab adapter is linked.
+The additional indexed-library executable uses the compatible compiler's module
+roots. A focused upstream-only diagnostic build can select just `pool_runtime`,
+`pool_exhaustion` and `buffer_storage` targets, without building that executable.
 Each project registers four pool checks: runtime semantics, the descriptor diagnostic,
 isolated reservation exhaustion, and a runner/accounting smoke check, plus the
 [buffer storage comparison](buffer-storage.md). This validates the selected revision,

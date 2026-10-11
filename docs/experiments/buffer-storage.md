@@ -1,10 +1,15 @@
-# Geometric runs and fixed chunks in Goose
+# Geometric runs, linked chunks and indexed buffers in Goose
 
 This experiment asks whether existing Goose slice pools can avoid relocation
 copying while retaining independently lived buffers. It compares a geometric
 contiguous run with a linked list of fixed-size chunks on the same deterministic
-workload. Both implementations use only `std` and `os` in
+workload. The two controls use only `std` and `os` in
 [`buffer_storage.goose`](../../tools/experiments/runtime/buffer_storage.goose).
+The third mode exercises the reusable
+[`lab.buffer.indexed`](../buffer/indexed.md) library through
+[`indexed_buffer.goose`](../../tools/experiments/runtime/indexed_buffer.goose).
+It owns a Store with a single grow-only byte arena and a library chunk freelist;
+the controls use the runtime slice pool. All three use the same selected compiler.
 
 The normal validation target is the upstream-tracking compatible fork. Do not
 build and rerun a second upstream checkout routinely: use an upstream-only minimal
@@ -23,11 +28,15 @@ python tools/buffer_storage_experiment.py --build build-pool-fork --documents 64
 
 Defaults are 3/16/64 buffers, 256-byte steps, 64 rounds, 4096-byte chunks, all
 three workloads and three independent processes per case. Each chunk-size
-comparison also records a geometric control. Results go to a new directory
+comparison records all three policies: 81 default processes. `--mode` selects
+one or more of `geometric`, `chunked`, `indexed`; for example, `--mode chunked
+--mode indexed` focuses on the directory comparison. Results go to a new directory
 under the first build's ignored `experiments/`; `--output` selects another new
 directory. The manifest stores revisions/diffs, compiler and executable hashes,
 copied sources, native C configuration, commands, raw CSV, checkpoints,
-percentiles and sampled process peaks. It refuses to overwrite existing results.
+percentiles and sampled process peaks. Schema 2 also records the indexed program's
+hash, copied library/contract sources, and reserved directory/freelist capacity.
+It refuses to overwrite existing results.
 
 ## Equal work and independent lifetimes
 
@@ -42,6 +51,9 @@ positions per live buffer, using `(sample * 7919 + buffer * 101) % used_bytes`.
 Cleanup closes even-numbered buffers and then odd-numbered ones rather than
 following stack order. A final full-pool allocation must reuse the entire freed
 storage without increasing high-water and must be initialized to zero.
+The library instead fills its freed chunk slots through new buffer IDs, checks
+the whole arena and closes them. Reuse work is excluded from the trace counters
+in every policy. Old IDs must remain invalid when indexed slots are reopened.
 
 Every buffer has a distinct byte pattern. Reopening changes its pattern; full
 payload and unused-capacity checks detect stale contents and interference with
@@ -69,6 +81,13 @@ multiple calls; use `alloc_calls` for the call count. A reserved append has no
 allocator duration. `read_probe` times addressing, counters and value assertions,
 and is reported separately. Its few samples are not a tail-latency study.
 
+Indexed `append_library`, `close_library` and `reuse_library` rows time full
+library operations, including bookkeeping and payload writes where applicable.
+They are deliberately distinct from allocator-only control rows. Their logical
+allocation/release counters count arena chunk slots, not native pool calls.
+Compare deterministic copying/address visits on equal work; these different
+operation timers do not justify an allocator speed ranking.
+
 CSV separates logical bytes, retained capacity, pool high-water, free bytes and
 largest free run. Chunk descriptors carry a slice, stored offset and next index;
 each buffer also needs head/tail indices. A free-slot list allows descriptor reuse
@@ -76,15 +95,24 @@ without moving payload. Metadata is counted in live and high-water slots, not
 native bytes. Both modes share a binary containing the fixed 4096-slot table;
 process RSS cannot isolate the metadata overhead of this representation.
 
+The indexed Store is in a separate binary. Its 32,768 reserved directory entries
+and 4,096 freelist entries consume 147,456 raw `i32` entry bytes, excluding buffer
+fields, length headers and native padding. Live/peak chunk slots remain in the
+CSV; the reserved entry counts are separate manifest metadata. Direct lookup
+removes chain traversal by paying that fixed metadata cost, including at small
+buffer counts. Both binaries remain headless and need no native lab services.
+
 The table bound and 128 MiB pessimistic allocation envelope are experiment
 policies. The runner checks them before creating a record or starting a program;
-the Goose entry point checks them as well. They do not implement transactional
-runtime allocation failure. Offset fields preserve the workaround documented in
+the Goose entry point checks them as well. Indexed requests also must fit the
+library's 512 entries and 2 MiB per buffer. The library guarantees whole-request
+quota refusal, independently checked by its contract; OS allocation failure is
+still fatal. Control offset fields preserve the workaround documented in
 the [pool contract experiment](pool-runtime.md).
 
 ## Interpretation for Goose
 
-On Windows/MSVC Release, lab `ead001f` and the clean compatible fork
+The historical two-policy record on Windows/MSVC Release, lab `ead001f` and fork
 `77653e48f3e3db0853f439014ce58e80df3de41d` completed the default 54 processes
 on one toolchain: 3/16/64 buffers, uniform/mixed/churn, both policies and three
 repeats. Every row passed the independent oracle and payload/lifetime assertions.
@@ -106,11 +134,13 @@ Compare copying, capacity and high-water with metadata and addressing together.
 Smaller chunks can reduce unused capacity while increasing allocator calls,
 descriptors, cleanup work and linked-list traversal. Larger chunks reverse that
 tradeoff. The linked-list lookup cost is a representation choice: an indexed
-table or pooled tree is an appropriate next comparison using existing Goose.
+table now supplies the direct-lookup comparison using existing Goose. A pooled
+tree remains the next comparison for edit sharing and independent Undo.
 
-This tests independent buffer storage and lifetimes, not text edits, Undo,
-generation-checked public handles, contiguous-consumer materialization,
-recoverable allocation, OS-memory release or long-session RSS stability.
+This trace tests append storage and independent lifetimes. The indexed library's
+separate contract also covers generation-checked handles, overwrites, shrinking,
+owned export and quota refusal. Neither is a text-edit/Undo, timed contiguous
+consumer, recoverable OS allocation, OS-memory release or long-session RSS study.
 It provides no requirement for general move or independent dynamic stacks by
 itself. Proposals need evidence of the remaining cost after library alternatives
 have been compared.

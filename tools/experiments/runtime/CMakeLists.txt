@@ -27,6 +27,13 @@ add_custom_command(OUTPUT "${storage_c}"
     "${CMAKE_CURRENT_SOURCE_DIR}/buffer_storage.goose"
   DEPENDS goose "${CMAKE_CURRENT_SOURCE_DIR}/buffer_storage.goose" ${stdlib} VERBATIM)
 add_executable(buffer_storage "${storage_c}")
+get_filename_component(lab_root "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
+set(indexed_c "${CMAKE_CURRENT_BINARY_DIR}/indexed_buffer.c")
+add_custom_command(OUTPUT "${indexed_c}"
+  COMMAND $<TARGET_FILE:goose> --stdlib "${GOOSE_SOURCE_DIR}/stdlib" --module-dir "${lab_root}/lib"
+    --standalone -o "${indexed_c}" "${CMAKE_CURRENT_SOURCE_DIR}/indexed_buffer.goose"
+  DEPENDS goose "${CMAKE_CURRENT_SOURCE_DIR}/indexed_buffer.goose" "${lab_root}/lib/lab/buffer/indexed.goose" ${stdlib} VERBATIM)
+add_executable(indexed_buffer "${indexed_c}")
 set(exhaustion_c "${CMAKE_CURRENT_BINARY_DIR}/pool_exhaustion.c")
 add_custom_command(OUTPUT "${exhaustion_c}"
   COMMAND $<TARGET_FILE:goose> --stdlib "${GOOSE_SOURCE_DIR}/stdlib" --standalone -o "${exhaustion_c}"
@@ -37,19 +44,24 @@ target_compile_definitions(pool_exhaustion PRIVATE GS_STACK_RESERVE=1048576)
 find_package(Threads REQUIRED)
 target_link_libraries(pool_runtime PRIVATE Threads::Threads)
 target_link_libraries(buffer_storage PRIVATE Threads::Threads)
+target_link_libraries(indexed_buffer PRIVATE Threads::Threads)
 target_link_libraries(pool_exhaustion PRIVATE Threads::Threads)
 if(MSVC)
   target_compile_options(pool_runtime PRIVATE /utf-8)
   target_compile_options(buffer_storage PRIVATE /utf-8)
+  target_compile_options(indexed_buffer PRIVATE /utf-8)
   target_compile_options(pool_exhaustion PRIVATE /utf-8)
   target_link_options(pool_runtime PRIVATE /STACK:67108864)
   target_link_options(buffer_storage PRIVATE /STACK:67108864)
+  target_link_options(indexed_buffer PRIVATE /STACK:67108864)
 elseif(WIN32)
   target_link_options(pool_runtime PRIVATE -Wl,--stack,67108864)
   target_link_options(buffer_storage PRIVATE -Wl,--stack,67108864)
+  target_link_options(indexed_buffer PRIVATE -Wl,--stack,67108864)
 else()
   target_link_libraries(pool_runtime PRIVATE m)
   target_link_libraries(buffer_storage PRIVATE m)
+  target_link_libraries(indexed_buffer PRIVATE m)
   target_link_libraries(pool_exhaustion PRIVATE m)
 endif()
 enable_testing()
