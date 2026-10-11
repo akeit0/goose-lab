@@ -1,0 +1,4 @@
+// Lab graphics/audio package: SDL3 and the two native layers in src/.
+// UI composition lives in lab.ui and uses Clay, FreeType and HarfBuzz.
+cmake_target = "goose_gfx_package";
+main_thread_only = true;

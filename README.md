@@ -41,7 +41,7 @@ See [the module map](docs/libraries.md) and [architecture](docs/architecture.md)
 
 ## Build
 
-Prerequisites: CMake 3.20+, a C/C++ toolchain, Git, and the compatible Goose
+Prerequisites: CMake 3.27+, a C/C++ toolchain, Git, and the compatible Goose
 source checkout with its SDL submodule initialized for GUI builds. Python 3 is
 needed for contract tests. Presets require CMake 3.21+.
 
@@ -136,8 +136,10 @@ The helpers build Goose from the configured source checkout; see
 
 ## Dependencies and status
 
-Pinned submodules provide curl, libuv, Clay, FreeType and HarfBuzz. SDL and the
-platform `gfx` layer belong to the separately configured Goose toolchain.
+Pinned submodules provide curl, libuv, Clay, FreeType, HarfBuzz and SDL.
+The graphics package is maintained directly in `packages/gfx`, derived from
+upstream `goose_gfx` with lab input/rendering extensions. Lab applications link it;
+the separately configured Goose compiler builds without native graphics packages.
 See [third-party notices](THIRD_PARTY.md) for licenses and source locations.
 
 Resource cleanup is explicit: copied native handles are borrowed aliases, workers

@@ -4,10 +4,16 @@ if(CHECK_GUI)
   list(APPEND probes gui)
 endif()
 foreach(probe IN LISTS probes)
+  set(entry "${LAB_SOURCE_DIR}/tools/toolchain/${probe}.goose")
+  if(probe STREQUAL "gui")
+    set(entry "${CHECK_DIR}/gui.goose")
+    file(READ "${LAB_SOURCE_DIR}/tools/toolchain/gui.goose" body)
+    file(WRITE "${entry}" "import gfx from \"${GFX_SOURCE_DIR}\";\n${body}")
+  endif()
   execute_process(
     COMMAND "${COMPILER}" --stdlib "${GOOSE_SOURCE_DIR}/stdlib"
       --module-dir "${LAB_SOURCE_DIR}/lib" --standalone
-      -o "${CHECK_DIR}/${probe}.c" "${LAB_SOURCE_DIR}/tools/toolchain/${probe}.goose"
+      -o "${CHECK_DIR}/${probe}.c" "${entry}"
     RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
   if(NOT result EQUAL 0)
     message(FATAL_ERROR

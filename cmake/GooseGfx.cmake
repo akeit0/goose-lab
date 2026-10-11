@@ -1,0 +1,10 @@
+# The graphics package is lab source, including the input/rendering extensions.
+set(GOOSE_LAB_GFX_SOURCE_DIR "${GOOSE_LAB_SOURCE_DIR}/packages/gfx")
+if(NOT EXISTS "${GOOSE_LAB_SOURCE_DIR}/third_party/SDL/CMakeLists.txt")
+  message(FATAL_ERROR "Initialize lab dependencies: git submodule update --init --recursive third_party/SDL")
+endif()
+set(GOOSE_GFX_SDL "${GOOSE_LAB_SOURCE_DIR}/third_party/SDL")
+add_subdirectory("${GOOSE_LAB_GFX_SOURCE_DIR}" goose-gfx EXCLUDE_FROM_ALL)
+if(TARGET goose_gfx)
+  set_property(TARGET goose_gfx PROPERTY GOOSE_LAB_GFX_SOURCE_DIR "${GOOSE_LAB_GFX_SOURCE_DIR}")
+endif()

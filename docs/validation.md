@@ -48,6 +48,7 @@ still requires a working GPU/backend; it is not a software renderer.
 | [JSON corpus](../tests/json_corpus.py) | Independent decoding, round trips and malformed/bounded inputs |
 | [Workbench fixture](../tests/workbench_fixture.py) | Edit/save/Git/search navigation, tabs/cursor restoration, Help/modal routing, initial Git modes, a subdirectory workspace, dirty-close decisions, idle frames and resource ownership |
 | [Git/file fixture](../tests/git_fixture.py) | Process streams, files/watches, atomic-save conflicts, Git history, search and editor interactions |
+| [Graphics package contracts](../tests/gfx) | Deferred close, on-demand presentation, screen/content revisions, ordered wheel, UTF-8 preedit/commit, token expiry and legacy scalar input |
 | [UI composition](../tests/view_contract.goose), [text/rendering](../tests/modern_contract.goose) | Ordered actions, focus, clipping, glyph geometry, unchanged GPU frames and cleanup |
 | [API fixture](../tests/api_fixture.py), [task fixture](../tests/task_fixture.py) | Persistence, failed-load/save recovery and asynchronous result adoption |
 
@@ -83,3 +84,32 @@ with `goose_lab_path`, and separate C clients of `goose_lab_text` and
 `goose_lab_scene`. Font shaping should not require scene-cache symbols; scene
 comparison should not require font libraries or SDL. Both clients use canonical
 native header paths and must return their native allocation counters to zero.
+
+## Graphics package separation (2026-10-11)
+
+Compiler `71e848d732362a47ee7fe000a3e1601d0196259a` merges upstream
+`4f23f22629a34d971adbd8c10017d203ab6bb2fa`. Graphics/audio source now lives directly
+in `packages/gfx`; there is no goose_gfx submodule or build-time patch. SDL is a
+lab dependency; the unused Nuklear UI layer is omitted. Compiler link inputs and
+the core target graph contain neither SDL nor graphics targets.
+
+Windows/MSVC Release validation covers the full 33 GUI contracts (including the
+two-layer C/Goose API check), 17 core/tool checks, module-root and native-adapter
+compiler checks, and external core/GUI consumers with samples/tests disabled.
+The external core consumer links only the path service; the GUI consumer imports
+lab UI, exercises UTF-8 text transactions and recursive relative imports, and
+preserves UTF-8 BOM handling and literal `@placeholder@` source text. Separate
+text/scene C clients link no SDL, use canonical native headers and release all
+tracked allocations. An incompatible stock compiler is rejected by the core
+capability probe before application generation. Four gfx fixtures
+also passed native execution at Goose -O0/-O2; the inline-return regression
+passed JIT at -O0/-O1/-O2, plus pool and two storage/reuse JIT smoke runs.
+
+The compiler's baseline runner uses `PYTHONUTF8=1` on this cp932 host. It reports
+3572 successful checks, including 492 native executions and 17 bootstrap checks,
+with one remaining failure: the resource-path fixture cannot open the non-ASCII
+`source space é/main.goose` path. Compiler argv/file loading is unchanged from
+upstream. This is a recorded Windows limitation; the compiler baseline is not
+claimed fully passing. Native package executions are skipped by that baseline
+because no packages are built into the compiler; lab graphics are tested by the
+contracts above. Native IME candidate-window placement still requires OS checks.

@@ -66,7 +66,7 @@ texture upload, geometry upload or screen render pass. Changes increment
 `Canvas.renders`. Every changed frame redraws the complete scene; this is not
 partial-damage rendering.
 
-Canvas creation enables `gfx::present_on_demand(true)` in the Goose fork. Continuous
+Canvas creation enables `gfx::present_on_demand(true)` in the lab graphics package. Continuous
 presentation remains the default for other gfx clients. Successful screen render
 passes request presentation automatically. Upload/compute/blit writers to the
 screen must call `gfx::request_present()` explicitly. Window expose/show/restore

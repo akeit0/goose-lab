@@ -15,6 +15,10 @@ goose_lab_program(api_model_contract tests/api_model_contract.goose MODULE_DIRS 
 goose_lab_program(git_contract tests/git_contract.goose LIBRARIES goose_lab_process goose_lab_files goose_lab_watch)
 goose_lab_program(tasks_contract tests/tasks_contract.goose LIBRARIES goose_lab_files MODULE_DIRS "${GOOSE_LAB_SOURCE_DIR}/samples")
 if(GOOSE_LAB_GUI)
+  foreach(check close_requests presentation text_transactions wheel)
+    goose_lab_gui_program(gfx_${check} tests/gfx/gfx_${check}.goose)
+    add_test(NAME gfx_${check} COMMAND gfx_${check})
+  endforeach()
   goose_lab_gui_program(workbench_ui_contract tests/workbench_ui_contract.goose LIBRARIES goose_lab_watch goose_lab_process goose_lab_files goose_lab_loop MODULE_DIRS "${GOOSE_LAB_SOURCE_DIR}/samples")
   # Isolated entry points exercise component contracts; they are not user samples.
   goose_lab_gui_program(text_editor tests/support/text_editor.goose LIBRARIES goose_lab_watch MODULE_DIRS "${GOOSE_LAB_SOURCE_DIR}/samples")
@@ -35,8 +39,12 @@ if(GOOSE_LAB_GUI)
 endif()
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
+if(GOOSE_LAB_GUI)
+  add_test(NAME gfx_api_contract COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${GOOSE_LAB_SOURCE_DIR}/packages/gfx/test/api_check.py")
+endif()
 add_test(NAME module_paths COMMAND "${Python3_EXECUTABLE}"
-  "${CMAKE_CURRENT_SOURCE_DIR}/tests/module_paths.py" $<TARGET_FILE:goose> "${GOOSE_SOURCE_DIR}/stdlib")
+  "${CMAKE_CURRENT_SOURCE_DIR}/tests/module_paths.py" $<TARGET_FILE:goose> "${GOOSE_SOURCE_DIR}/stdlib" "${GOOSE_LAB_GFX_SOURCE_DIR}")
 add_test(NAME http_contract COMMAND "${Python3_EXECUTABLE}"
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/http_fixture.py" $<TARGET_FILE:http_contract>)
 add_test(NAME http_clients_contract COMMAND "${Python3_EXECUTABLE}"

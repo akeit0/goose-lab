@@ -1,67 +1,67 @@
 # Goose toolchain requirements
 
-Goose is maintained outside this repository. `GOOSE_SOURCE_DIR` must explicitly
-name a compatible source checkout; a sibling directory or personal home path is
-never inferred. Initialize its SDL submodule for GUI builds.
+`GOOSE_SOURCE_DIR` explicitly names the compatible compiler source checkout.
+Routine validation uses one upstream-tracking [akeit0/goose lab-toolchain branch](https://github.com/akeit0/goose/tree/lab-toolchain),
+validated at `71e848d732362a47ee7fe000a3e1601d0196259a`, synchronized with
+upstream `4f23f22629a34d971adbd8c10017d203ab6bb2fa`. TinyCC is vendored and always built;
+the compiler has no SDL dependency and builds with `GOOSE_BUILTIN_LIBS` empty.
+The typechecker, optimizer and slice-pool runtime are upstream code. The implicit
+inline-return correction from PR #11 is already upstream.
 
-Routine validation uses one upstream-tracking compatible checkout of
-[akeit0/goose, branch lab-toolchain](https://github.com/akeit0/goose/tree/lab-toolchain).
-The validated published revision is `c2ecb4421facdc6476214606b67488df93eaa033`,
-which merges upstream `ac77e1616542da1dcb3ebf54b1f43d9b32b6369c`, including
-the merged implicit inline-return correction and subsequent compiler/runtime
-improvements. The synchronization merge is `3e00736`.
-Windows/MSVC Release passed the 27 main checks, five pool/storage checks and
-15 focused return executions at Goose `-O0/-O1/-O2`.
-
-The synchronization is pushed to `lab-toolchain`.
-[Upstream PR #11](https://github.com/aardappel/goose/pull/11) was merged as
-`e7792d7`; its correction and regression now come directly from upstream.
-The typechecker, optimizer, inline-return code and slice-pool runtime have no
-remaining fork differences. Module search, native adapter guards and opt-in gfx
-integration remain the compatibility extensions. The fork's
-[capability guide](https://github.com/akeit0/goose/blob/c2ecb4421facdc6476214606b67488df93eaa033/docs/fork.md)
-describes its integration extensions.
-
-Select the validated checkout explicitly:
+The remaining integration differences are ordered/repeated `--module-dir`,
+guarded C slice declarations and package CMake paths for `add_subdirectory`
+consumers, plus Visual Studio test-tooling discovery that reuses an existing
+vcvars environment. The CMake correction resolves compiler-owned inputs relative to the compiler's
+CMake module rather than the parent project's source directory.
 
 ```text
-git clone --branch lab-toolchain --recurse-submodules git@github.com:akeit0/goose.git /path/to/goose
-git -C /path/to/goose checkout c2ecb4421facdc6476214606b67488df93eaa033
+git clone --branch lab-toolchain git@github.com:akeit0/goose.git /path/to/goose
+git submodule update --init --recursive
 cmake -S . -B build -DGOOSE_SOURCE_DIR=/path/to/goose
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
 ```
 
-Merge upstream before qualifying the next baseline and review the remaining fork
-delta for effects on the experiment. Keep its compiler, stdlib and native libraries
-together. Run a second upstream checkout only for a focused reproduction of a
-relevant difference; repeating identical suites on two checkouts is not routine work.
+CMake 3.27+ is required by the upstream compiler. A second upstream checkout is
+used only for a focused reproduction of a relevant fork difference, rather than
+repeating the same suite on two compilers.
 
-## Required capabilities
+## Application graphics package
 
-| Scope | Fork dependency | Why |
-| --- | --- | --- |
-| Goose programs | Ordered/repeated `--module-dir` | Libraries and sample application modules have separate import roots |
-| Text/UI | Guarded `sl_f32` / `sl_u32` declarations | Optional native adapters can supply slice types not emitted by reachable Goose code without conflicting with emitted types |
-| UI rendering | On-demand presentation and screen/content revisions | Idle scenes skip GPU work and external screen writers invalidate cached scenes |
-| UI input | Atomic UTF-8 commit/preedit events and caret-area reporting | IME stays transient until an accepted commit; candidate placement follows the caret |
-| Editor lifecycle | Deferred native close requests | Save/discard/cancel can finish before the app exits |
-| Interaction fixtures | Ordered wheel/preedit/close injection | Tests use the platform event queue without operating OS input dialogs |
+[packages/gfx](../packages/gfx) contains ordinary lab source derived from
+[aardappel/goose_gfx](https://github.com/aardappel/goose_gfx) revision
+`6cfa3dec2ef2a6cb19ee71548b38151094e947bd`. Lab input/presentation extensions
+are implemented directly in these files. The package is not a submodule; the
+build performs no patching or package-source copying.
 
-`--stdlib`, `--standalone` and `--include` already exist upstream. The build supplies
-stdlib explicitly and does not depend on fork-specific automatic discovery.
+SDL remains a pinned external dependency at `third_party/SDL`. The unused
+upstream Nuklear UI layer is omitted; lab UI uses Clay and the lab text libraries. Core builds (`GOOSE_LAB_GUI=OFF`) do not configure or link
+the graphics package. [GooseGfx.cmake](../cmake/GooseGfx.cmake) configures its native
+targets only for GUI builds. Generated GUI roots declare the local package using
+upstream `import gfx from "path"` syntax; applications link its matching
+`goose_gfx` archive. The optional audio target stays excluded from the normal lab
+build. The compiler itself links none of these targets.
 
-Core programs do not require gfx extensions or text-adapter guards. Native C-only
-consumers do not use the Goose generation step. The current upstream checkout is
-not compatible with this build's module roots; GUI use additionally needs the
-capabilities above. See the [library map](libraries.md) for native dependencies.
+The directly maintained package preserves existing lab features:
 
-The build runs compile-only core/GUI probes before application generation and
-reports missing capabilities with compiler diagnostics. It checks capabilities,
-not the repository URL or an exact Git revision, so a future compatible upstream
-checkout can be selected through the same `GOOSE_SOURCE_DIR` setting.
+| Scope | Contract |
+| --- | --- |
+| Rendering | On-demand presentation, screen/content revisions and idle submission accounting |
+| Text input | Atomic UTF-8 commit/preedit events, frame-local payload tokens and caret-area reporting |
+| Lifecycle | Deferred close requests for save/discard/cancel |
+| Fixtures | Ordered wheel, preedit and close injection through the event queue |
 
-The current CMake integration builds the compiler and selected native Goose
-libraries from that source checkout. The application helper always supplies the
-stdlib and module roots explicitly.
+Token payloads must be copied before the next frame or close. Native code retains
+no Goose references. The event representation is extended, so generated Goose C
+and the native graphics archive must both be rebuilt when changing the package.
+[Focused gfx contracts](../tests/gfx) now live in lab, alongside application tests.
+GPU-backed checks use headless windows; native IME candidate placement and OS
+expose/resize behavior still require manual window checks.
 
-Keep fork development/review notes in ignored local references. Public API and
-lifetime contracts belong in the library guides. See [local development](local-development.md).
+## Capability checks
+
+The build runs core/GUI compile probes before generating applications. Text/UI
+adapters require guarded `sl_f32` / `sl_u32` declarations; ordinary core programs
+need only the module-root extension. Existing upstream `--stdlib`, `--standalone`
+and `--include` options remain unchanged. Capability checks use compiler behavior,
+not repository identity. See [validation](validation.md) and [libraries](libraries.md).

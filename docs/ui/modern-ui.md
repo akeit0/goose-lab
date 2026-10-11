@@ -1,6 +1,6 @@
 # Renderer and component gallery
 
-`component_gallery` uses Clay, the fork's SDL3/GPU `gfx` layer, FreeType,
+`component_gallery` uses Clay, lab's upstream goose_gfx package with input/rendering extensions, FreeType,
 and HarfBuzz. The application model,
 hit testing, component styles, clipping, geometry and draw batching live in
 Goose.

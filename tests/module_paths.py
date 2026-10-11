@@ -16,6 +16,7 @@ def check(compiler, main, *options, succeeds=True):
 def main():
     compiler = str(Path(sys.argv[1]).resolve())
     stdlib = Path(sys.argv[2]).resolve()
+    gfx_package = Path(sys.argv[3]).resolve() if len(sys.argv) > 3 and sys.argv[3] else None
     # Public library imports must resolve without any sample/tool module roots.
     library = Path(__file__).resolve().parents[1] / "lib"
     for source in library.rglob("*.goose"):
@@ -23,6 +24,11 @@ def main():
             if module.startswith("lab."):
                 assert (library / (module.replace(".", "/") + ".goose")).is_file(), (source, module)
             else:
+                if module == "gfx":
+                    # Core builds need not initialize optional graphics sources.
+                    if gfx_package:
+                        assert (gfx_package / "gfx.goose").is_file()
+                    continue
                 assert (stdlib / (module.replace(".", "/") + ".goose")).is_file(), (source, module)
     with tempfile.TemporaryDirectory(prefix="goose-lab modules ") as directory:
         root = Path(directory)
