@@ -118,6 +118,12 @@ HTTP error-string bound. Queued requests are also bounded by inflight count and
 owned exports add storage/copies. `stats` does not measure these or process RSS.
 Stored payload bytes and arena length must not be presented as total memory.
 
+`completed` counts recognized Flights whose tokens have been released, including
+cancelled/closed jobs. `discarded` counts received completion messages that were
+not adopted (including stale generations and duplicates), not explicit mailbox
+`discard` calls. `storage_refused` counts receiver-side storage failures, separate
+from HTTP transport byte-limit errors and submission refusals.
+
 The Service reserves all 64 client/Flight entries regardless of configured
 client count. The generated complete Service has a 156188-byte fixed representation
 on the validated toolchain, including the indexed Store's 148861 bytes and tail
@@ -164,6 +170,16 @@ Git state, rebuilds Goose `-O0/-O1/-O2` with native C `-O2`, runs three repetiti
 per level and measures the fixed Service representation. It refuses an existing
 output directory and preserves incomplete records on failure. Use one selected
 upstream-tracking compatible fork; no equivalent second checkout run is needed.
+
+The clean qualification at lab `ca07aa4e895e3b0230488ecb9d8d6fd797f7ef12`
+and fork `c2ecb4421facdc6476214606b67488df93eaa033` passed all nine runs
+(`-O0/-O1/-O2`, three repeats each): 8964 model requests and 9018 independently
+checked trace rows, plus lifecycle/ownership/budget/shutdown assertions in every
+run. It measured 156188 fixed Service bytes. The main Windows/MSVC Release
+configuration also passed all 26 CTest checks in 80.71 seconds. Raw records and
+source/archive snapshots remain under ignored
+`local/references/http-clients/qualification-run/`; the commands above recreate
+the public contract without those local files.
 
 This validates a shared-owner library for independently lived HTTP clients.
 It does not supply runtime-addressed queue instances, multiple concurrent Service
