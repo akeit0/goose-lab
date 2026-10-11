@@ -6,24 +6,27 @@ never inferred. Initialize its SDL submodule for GUI builds.
 
 Routine validation uses one upstream-tracking compatible checkout of
 [akeit0/goose, branch lab-toolchain](https://github.com/akeit0/goose/tree/lab-toolchain).
-The validated published revision is `77653e48f3e3db0853f439014ce58e80df3de41d`,
-which merges upstream `2ec9b38bde93cda87ee374157b0353722b2d5f8e` and includes
-the independent compiler correction `b08994e` for implicit inline returns.
+The validated published revision is `c2ecb4421facdc6476214606b67488df93eaa033`,
+which merges upstream `ac77e1616542da1dcb3ebf54b1f43d9b32b6369c`, including
+the merged implicit inline-return correction and subsequent compiler/runtime
+improvements. The synchronization merge is `3e00736`.
 Windows/MSVC Release passed the 23 main checks, five pool/storage checks and
 15 focused return executions at Goose `-O0/-O1/-O2`.
 
-The synchronization and correction are pushed to `lab-toolchain`. The compiler
-correction is also proposed independently as
-[upstream PR #11](https://github.com/aardappel/goose/pull/11), with one commit
-containing only the compiler fix and regression test. The fork's
-[capability guide](https://github.com/akeit0/goose/blob/77653e48f3e3db0853f439014ce58e80df3de41d/docs/fork.md)
+The synchronization is pushed to `lab-toolchain`.
+[Upstream PR #11](https://github.com/aardappel/goose/pull/11) was merged as
+`e7792d7`; its correction and regression now come directly from upstream.
+The typechecker, optimizer, inline-return code and slice-pool runtime have no
+remaining fork differences. Module search, native adapter guards and opt-in gfx
+integration remain the compatibility extensions. The fork's
+[capability guide](https://github.com/akeit0/goose/blob/c2ecb4421facdc6476214606b67488df93eaa033/docs/fork.md)
 describes its integration extensions.
 
 Select the validated checkout explicitly:
 
 ```text
 git clone --branch lab-toolchain --recurse-submodules git@github.com:akeit0/goose.git /path/to/goose
-git -C /path/to/goose checkout 77653e48f3e3db0853f439014ce58e80df3de41d
+git -C /path/to/goose checkout c2ecb4421facdc6476214606b67488df93eaa033
 cmake -S . -B build -DGOOSE_SOURCE_DIR=/path/to/goose
 ```
 
