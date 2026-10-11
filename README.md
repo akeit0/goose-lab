@@ -12,6 +12,8 @@ Development and testing currently focus on Windows. The libraries and build
 should remain portable: CMake, native libraries and optional Python tools do not
 require PowerShell. Linux and macOS have not yet been validated.
 See the [documentation index](docs/README.md) for guides by area.
+The [Goose pattern guide](docs/goose-patterns.md) summarizes efficient storage,
+ownership and worker composition demonstrated by the experiments.
 
 ## What's here
 

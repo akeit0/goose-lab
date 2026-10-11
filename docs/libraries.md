@@ -5,6 +5,7 @@ location. For example `import lab.net.http;` uses `lab_net_http`; file editing i
 `lab.document.model` / `lab_document_model`. UI rendering is `lab.ui.render.font`
 / `lab_ui_render_font`.
 See [architecture and dependency boundaries](architecture.md).
+For choosing a representation, see [useful storage and lifetime patterns](goose-patterns.md).
 
 | Import prefix | Modules under that prefix | Native target / guide |
 | --- | --- | --- |

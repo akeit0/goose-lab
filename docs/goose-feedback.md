@@ -3,6 +3,9 @@
 Application experience suggests these patterns for Goose's value semantics,
 isolated workers and explicit resource lifetimes. Checkout-specific investigations
 belong in ignored local references.
+The [pattern guide](goose-patterns.md) collects the reusable storage/lifetime
+choices and measured tradeoffs; this page discusses application experience and
+remaining language/API questions.
 
 ## Composing document and Git pages
 

@@ -3,6 +3,8 @@
 Start with the [project README](../README.md) for building and running samples.
 The [library map](libraries.md) lists imports and native targets;
 [architecture](architecture.md) describes dependency boundaries and ownership.
+The [Goose pattern guide](goose-patterns.md) compares useful storage structures,
+ownership and asynchronous lifetimes, with measured costs and application limits.
 
 ## Library guides
 
