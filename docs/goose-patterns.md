@@ -219,6 +219,20 @@ mutating the owner. Selection needs one bounded table scan and no extra index.
 This verifies admission order without claiming equal completion time or
 manufacturing native credits.
 
+Choose admission domains by the independently eligible consumer. The
+[document-scoped experiment](io/document-services.md) uses six domains for three
+documents and two protocols, so a cancelled Flight awaiting retirement cannot
+block another document's demand for the same protocol. A spare pending descriptor
+allows provisional enqueue before removing the previous request, preserving it
+on refusal even when every logical lane is occupied.
+
+Resource reception and application adoption can have different lifetimes. Export
+an owned completion correlated with its Flight, then check document generation,
+revision and latest application request key when applying it. Cancellation does
+not replace these checks: a result already received may still become obsolete.
+Keep the request-key owner while its documents remain open, and track page
+sequence separately to reject duplicate application without granting credit.
+
 Give each producer one unACKed data page. Polling or taking does not grant
 credit; explicit ACK/discard does. Keeping a page can stall that producer while
 other active lanes progress. If every lane waits, queued jobs wait too. This

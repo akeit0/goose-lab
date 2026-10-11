@@ -107,6 +107,9 @@ The same qualification runner supports `--contract mixed_services`.
 The [bounded admission queue](docs/io/mixed-services.md#fair-host-admission-and-repeated-reuse)
 keeps domain turns and FIFO demand keys separate from the protocol owners;
 `--contract admission_services` verifies shared-capacity order and sustained reuse.
+The [document-scoped experiment](docs/io/document-services.md) combines three
+documents with these owners, checking replacement, close/reopen and guarded
+application of owned results through `--contract document_services`.
 
 [Bounded search streams](docs/io/streams.md) add explicit page ACKs on distinct
 typed worker lanes, stalled-consumer/cancellation checks and 3/16/64 real searches

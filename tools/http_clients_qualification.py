@@ -1,4 +1,4 @@
-"""Qualify HTTP lifetimes, composition or fair admission at Goose O0/O1/O2 on Windows/MSVC."""
+"""Qualify HTTP lifetimes, service/document composition and admission at Goose O0/O1/O2 on Windows/MSVC."""
 import argparse
 import importlib.util
 import json
@@ -27,7 +27,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", default="build-core")
     parser.add_argument("--configuration", default="Release")
-    parser.add_argument("--contract", choices=("http_clients", "mixed_services", "admission_services"), default="http_clients")
+    parser.add_argument("--contract", choices=("http_clients", "mixed_services", "admission_services", "document_services"), default="http_clients")
     parser.add_argument("--cycles", type=int, help="Admission reuse cycles per process (default 128)")
     parser.add_argument("--levels", nargs="+", type=int, choices=(0, 1, 2), default=[0, 1, 2])
     parser.add_argument("--repeats", type=int, default=3)
@@ -71,9 +71,12 @@ def main():
                            (ROOT / "tools/run.py", "run.py"), (ROOT / "tools/profile.py", "profile.py"),
                            (checkout / "scripts/toolchain.py", "toolchain.py")):
         shutil.copyfile(source, sources / target)
-    if args.contract in ("mixed_services", "admission_services"):
+    if args.contract != "http_clients":
         shutil.copyfile(ROOT / "tests/http_clients_fixture.py", sources / "http_clients_fixture.py")
         sys.path.insert(0, str(sources))
+    if args.contract == "document_services":
+        model = sources / "tools/experiments/document_requests.goose"; model.parent.mkdir(parents=True)
+        shutil.copyfile(ROOT / "tools/experiments/document_requests.goose", model)
     libraries, library_hashes = [], {}
     for dependency in dependencies.split(";"):
         if not dependency:
@@ -107,6 +110,8 @@ def main():
             generated = output / f"contract-O{level}.c"; binary = generated.with_suffix(".exe")
             command = [str(compiler), f"-O{level}", "--stdlib", str(sources / "stdlib"), "--module-dir", str(sources / "lib"),
                        "--standalone", "--include", str(sources / "native/goose_lab.h"), "-o", str(generated), str(sources / "contract.goose")]
+            if args.contract == "document_services":
+                command[1:1] = ["--module-dir", str(sources / "tools")]
             generation = subprocess.run(command, capture_output=True, text=True, timeout=60)
             (output / f"generate-O{level}.log").write_text(generation.stdout + generation.stderr, encoding="utf-8"); generation.check_returncode()
             ok, log = cc.compile(generated, binary, opt=2, extra=extra, defines=defines, libs=libraries)

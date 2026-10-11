@@ -144,11 +144,10 @@ def main():
                ROOT / "tools/experiments/document_profile.goose", ROOT / "tools/experiments/pool_document.goose",
                ROOT / "tests/multi_document_contract.goose", ROOT / "lib/lab/document/model.goose",
                ROOT / "lib/lab/document/piece_tree.goose", ROOT / "tests/document_experiment_fixture.py"]
-    dependency_sources = [*sorted((ROOT / "lib").rglob("*.goose")),
-                          *sorted((ROOT / "tools/experiments").glob("*.goose"))]
+    dependency_sources = [*sorted((ROOT / "lib").rglob("*.goose")), sources[4]]
     # A recorded source hash is useful only when the corresponding binary was
     # rebuilt. The runtime probe and contract have separate dependency closures.
-    for binary, inputs in ((program, dependency_sources), (contract, [sources[5], *dependency_sources])):
+    for binary, inputs in ((program, [sources[3], *dependency_sources]), (contract, [sources[5], *dependency_sources])):
         if any(path.stat().st_mtime_ns > binary.stat().st_mtime_ns for path in inputs):
             raise RuntimeError(f"Rebuild {binary.name} before recording modified sources")
     sources = list(dict.fromkeys([*sources, *dependency_sources]))

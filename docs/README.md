@@ -34,6 +34,8 @@ ownership and asynchronous lifetimes, with measured costs and application limits
 - [Validation](validation.md) and [third-party notices](../THIRD_PARTY.md).
 - [Independent document experiments](experiments/independent-documents.md): headless
   slice-pool ownership, correctness and reproducible time/storage comparisons.
+- [Document-scoped service experiment](io/document-services.md): three documents,
+  HTTP/search replacement, admission domains and guarded result application.
 - [Goose pool runtime experiments](experiments/pool-runtime.md): the same minimal
   source on upstream/fork, growth policies, stale views and a compiler diagnostic.
 - [Buffer storage experiments](experiments/buffer-storage.md): geometric runs,
