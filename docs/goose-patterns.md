@@ -46,6 +46,16 @@ retain data across mutation, close or shutdown. Avoid materializing a whole
 buffer just to inspect a small range. At a contiguous file/native/queue boundary,
 account for the copy required by that boundary.
 
+When the caller already owns the destination, an output-reference API such as
+`slot_arena::append_to` copies directly into that destination. This avoids an
+intermediate owned array and an additional explicit copy when building another
+resizable value. It does not remove the destination copy or its growth cost.
+
+Logical identity and byte placement can be separate layers. The stream owns
+generation/serial checks; its slot arena only manages caller-assigned indices.
+This keeps lifetime checks at the service boundary without duplicating them in
+each internal storage record. Direct users must provide their own stale-ID policy.
+
 Resource ownership remains a convention in these APIs. Copying an integer native
 handle aliases the same resource; explicitly copying a Store or Service does not
 establish a second valid resource owner. Keep create/use/close in the designated

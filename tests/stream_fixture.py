@@ -36,10 +36,10 @@ def validate_producer(stdout):
         raise AssertionError("Incomplete lifecycle/bounds coverage")
     total = sum(i * 7 for i in range(64)); expected_storage = (total, total + 128 * 61, total, 0)
     if storage != expected_storage: raise AssertionError(f"Compact storage mismatch: {storage} expected {expected_storage}")
-    if fragmented != (3 * 65536, 3 * 65536, 2 * 65536, 1): raise AssertionError("Pressure compaction mismatch")
+    if fragmented != (3 * 65536, 3 * 65536, 2 * 65536, 1, 32768 + 65536): raise AssertionError("Pressure compaction/reuse mismatch")
     return {"clients": 83, "pages": sum(map(len, traces.values())), "ack_cancel_races": 100,
             "compact_storage": dict(zip(("peak_payload_bytes", "queue_bytes", "exported_bytes", "shifted_bytes"), storage)),
-            "fragmented_storage": dict(zip(("peak_payload_bytes", "peak_arena_bytes", "shifted_bytes", "compactions"), fragmented))}
+            "fragmented_storage": dict(zip(("peak_payload_bytes", "peak_arena_bytes", "shifted_bytes", "compactions", "reused_bytes"), fragmented))}
 
 
 def files(root):

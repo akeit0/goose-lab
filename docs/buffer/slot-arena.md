@@ -50,6 +50,11 @@ order, reuses the first sufficient gap, then uses remaining tail space. Only whe
 neither fits within the arena bound does it compact survivors before insertion.
 Empty values have zero offset and consume no payload.
 
+The measured Windows x64/MSVC packed `sizeof(Store)` is 1148 bytes, including
+the 16-byte tail header. Its 64 span records account for 1024 of those bytes.
+This fixed cost applies even to one configured slot and excludes the byte tail,
+allocator backing capacity and owned outputs.
+
 Limits allow 1..64 slots, 0..128 MiB total arena bytes and 0..2 MiB per value.
 Defaults are 64 slots, 4 MiB total and 65536 bytes per value. Configuring fewer
 slots does not shrink the fixed table. Arena length includes holes; logical bytes
@@ -90,7 +95,9 @@ slot removal shifts none. A pressure contract retains two 65536-byte survivors,
 then replaces a consumed 32768-byte page with 65536 bytes. Neither the hole nor
 the remaining tail fits, so one compaction moves 131072 bytes and the new page
 fits the exact 196608-byte three-client bound. Owned exports and survivors remain
-correct, and shutdown empties the arena. Search retains its compact queue codec.
+correct. Holding both outer pages while replacing the middle page at 32768/65536
+bytes reuses 98304 retained bytes with no additional moves. Shutdown empties the
+arena. Search retains its compact queue codec.
 
 ```text
 cmake --build build-core --config Release --target slot_arena_contract stream_contract search_stream_contract --parallel

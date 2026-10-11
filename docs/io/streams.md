@@ -147,19 +147,20 @@ in-process format, not a persisted file format or a replacement for search APIs.
 The worker encodes through a const Batch reference. The host's owned `Page<Batch>`
 API still returns the fixed Batch representation, so its exports are not compact.
 
-The earlier eager-compaction qualification measured these Windows x64 fixed
-representations; the slot-arena runner measures the current headers separately:
+The slot-arena qualification measured these Windows x64 fixed representations:
 
 | Value | Bytes |
 | --- | ---: |
-| Search Service metadata/header, excluding its byte tail | 10047 |
+| Search Service metadata/header, excluding its byte tail | 10195 |
 | Search Batch export | 44539 |
 | Search Page export with receipt/status | 44592 |
-| Synthetic producer Service metadata/header | 10047 |
+| Synthetic producer Service metadata/header | 10195 |
+| Standalone slot arena Store, excluding its byte tail | 1148 |
 | Search Packet header including the runtime tail header | 69 |
 | Queue image prefix, before payload bytes | 61 |
 
-The original fixed-mailbox Service reserved 2859463 bytes. The current owner starts
+The eager-compaction Service header was 10047 bytes; slot storage and counters
+add 148 bytes. The original fixed-mailbox Service reserved 2859463 bytes. The current owner starts
 with zero retained payload bytes; search live ready payloads are bounded by
 `clients * 44540`, its arena including holes by `clients * 65536`, and held payloads
 live in caller-owned exports. Queue images

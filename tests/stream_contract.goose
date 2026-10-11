@@ -181,17 +181,29 @@ fn fragmented_storage() {
     // once to preserve two unread survivors and fit the complete bounded arena.
     lab_io_stream::publish_bytes<support_stream_producer::Payload>(requests[0], 0, 2, large); assert(lab_io_stream::poll(s) == 1);
     let full = lab_io_stream::stats(s); assert(full.payload_bytes == 196608 && full.arena_bytes == 196608 && full.compactions == 1 && full.shifted_bytes == 131072);
+    // Keep the physically first/last pages unread while the middle producer
+    // publishes different sizes. This must reuse holes without moving either.
+    let middle, mc = lab_io_stream::take_packet(s, ids[2]); assert(mc == 0 && middle.data.len == 65536);
+    assert(lab_io_stream::ack(s, middle.receipt) == 0); var small: u8[>..] = []; small.resize(32768, 7);
+    lab_io_stream::publish_bytes<support_stream_producer::Payload>(requests[2], 0, 2, small); assert(lab_io_stream::poll(s) == 1);
+    let reused = lab_io_stream::stats(s); assert(reused.payload_bytes == 163840 && reused.arena_bytes == 196608 && reused.reused_bytes == 32768 && reused.shifted_bytes == 131072);
+    let changed, cc = lab_io_stream::take_packet(s, ids[2]); assert(cc == 0 && changed.data.len == 32768);
+    for byte in changed.data { assert(byte == 7); } assert(lab_io_stream::ack(s, changed.receipt) == 0);
+    var restored: u8[>..] = []; restored.resize(65536, 3);
+    lab_io_stream::publish_bytes<support_stream_producer::Payload>(requests[2], 0, 3, restored); assert(lab_io_stream::poll(s) == 1);
+    let again = lab_io_stream::stats(s); assert(again.reused_bytes == 98304 && again.compactions == 1 && again.shifted_bytes == 131072);
     for i in 3 {
         let page, code = lab_io_stream::take_packet(s, ids[i]); assert(code == 0 && page.data.len == 65536);
         let pattern: u8 = if i == 0 { 9 } else { (i + 1) as u8 }; for byte in page.data { assert(byte == pattern); }
         assert(lab_io_stream::ack(s, page.receipt) == 0);
-        lab_io_stream::publish_bytes<support_stream_producer::Payload>(requests[i], 0, if i == 0 { 3 } else { 2 }, "", true);
+        let sequence: u64 = if i == 0 { 3 } else if i == 2 { 4 } else { 2 };
+        lab_io_stream::publish_bytes<support_stream_producer::Payload>(requests[i], 0, sequence, "", true);
     }
     lab_io_stream::poll(s); for id in ids { let page, code = lab_io_stream::take_packet(s, id); assert(code == 0 && page.done); }
     lab_io_stream::prepare_shutdown(s); lab_io_stream::finish_shutdown(s);
-    for byte in kept.data { assert(byte == 1); }
+    for byte in kept.data { assert(byte == 1); } for byte in middle.data { assert(byte == 3); }
     let end = lab_io_stream::stats(s); assert(end.arena_bytes == 0 && end.inflight == 0);
-    print("fragmented-storage,", end.peak_payload_bytes, ",", end.peak_arena_bytes, ",", end.shifted_bytes, ",", end.compactions);
+    print("fragmented-storage,", end.peak_payload_bytes, ",", end.peak_arena_bytes, ",", end.shifted_bytes, ",", end.compactions, ",", end.reused_bytes);
     free_tokens(); print("fragmented stream storage and pressure compaction passed");
 }
 fn main() { races(); for count in [3, 16, 64] { many(count); } bounds(); compact_storage(); fragmented_storage(); print("Stream contracts passed"); }
