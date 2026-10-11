@@ -29,8 +29,8 @@ python tools/buffer_storage_experiment.py --build build-pool-fork --documents 64
 Defaults are 3/16/64 buffers, 256-byte steps, 64 rounds, 4096-byte chunks, all
 three workloads and three independent processes per case. Each chunk-size
 comparison records all three policies: 81 default processes. `--mode` selects
-one or more of `geometric`, `chunked`, `indexed`; for example, `--mode chunked
---mode indexed` focuses on the directory comparison. Results go to a new directory
+one or more of `geometric`, `chunked`, `indexed`; selecting `--mode chunked`
+and `--mode indexed` focuses on the directory comparison. Results go to a new directory
 under the first build's ignored `experiments/`; `--output` selects another new
 directory. The manifest stores revisions/diffs, compiler and executable hashes,
 copied sources, native C configuration, commands, raw CSV, checkpoints,
@@ -111,6 +111,38 @@ still fatal. Control offset fields preserve the workaround documented in
 the [pool contract experiment](pool-runtime.md).
 
 ## Interpretation for Goose
+
+The three-policy record used clean lab `2e523e0` and the clean compatible fork
+`c2ecb4421facdc6476214606b67488df93eaa033` on Windows/MSVC Release. The default
+81 processes and the 81-process 48-round 64-buffer chunk-size comparison all
+passed the independent oracle, payload/spare-byte assertions and cleanup/reuse.
+They ran on one toolchain. Ignored manifests are
+`local/references/buffer-storage/indexed-library-run/results.json` and
+`local/references/buffer-storage/indexed-library-48-run/results.json`.
+
+For the default 64-buffer mixed workload, the indexed library and linked control
+both retain 3,145,728 payload/capacity bytes and 768 peak chunk slots, with zero
+payload relocation. Their 4,096 reads perform 4,096 and 26,219 directory/chain
+visits respectively. With close/reopen, this becomes 8,192 versus 47,437 visits
+for 8,192 reads; both remain at 768 peak chunk slots and fully reuse the arena.
+The library adds 147,456 raw fixed directory/freelist bytes per Store, so reduced
+traversal alone is not a total-memory or speed result.
+
+For 64 mixed buffers at 48 rounds, logical payload is 2,359,296 bytes:
+
+| Chunk bytes | Retained payload capacity/high-water (linked and indexed) | Peak chunk slots | Linked visits for 4,096 reads | Indexed visits |
+| ---: | ---: | ---: | ---: | ---: |
+| 1,024 | 2,359,296 | 2,304 | 74,732 | 4,096 |
+| 4,096 | 2,490,368 | 608 | 20,320 | 4,096 |
+| 16,384 | 2,883,584 | 176 | 6,795 | 4,096 |
+
+Direct indexing removes the traversal penalty as chunks become smaller. Smaller
+chunks still require more allocations, directory slots and close operations;
+metadata reservations remain fixed in this bounded library. The geometric
+control retains 3,145,728 capacity bytes at a 3,244,032-byte pool high-water,
+with 3,088,384 inferred moved-capacity bytes. This is evidence for a library
+representation alternative using existing Goose, not a requirement for a new
+allocator, move operation or independent dynamic stack.
 
 The historical two-policy record on Windows/MSVC Release, lab `ead001f` and fork
 `77653e48f3e3db0853f439014ce58e80df3de41d` completed the default 54 processes
