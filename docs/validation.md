@@ -24,8 +24,10 @@ ctest --test-dir build-core -C Release --output-on-failure
 ```
 
 With samples and tests enabled, the GUI configuration registers 36 checks and
-the GUI-free configuration registers 18. Enabling manual tools adds the
-`document_experiment_smoke` and `document_store_experiment_smoke` checks. Tests use loopback HTTP/TLS fixtures,
+the GUI-free configuration registers 18. Enabling manual tools adds five checks:
+`document_experiment_smoke`, `document_store_experiment_smoke` and the
+[regex/ECS/server experiments](experiments/regex-ecs-server.md).
+Tests use loopback TCP/HTTP/TLS fixtures,
 temporary Git repositories and temporary files. Python fixtures do not contact
 public services. The checked-in TLS key is only a localhost test fixture.
 
@@ -42,6 +44,7 @@ still requires a working GPU/backend; it is not a software renderer.
 | [Slot arena contract](../tests/slot_arena_contract.goose), [flat Python model](../tests/slot_arena_fixture.py) | 27000 variable-value operations at 3/16/64 slots, all payloads checked after each operation, holes/overlap/compaction, unchanged refusal, owned exports and 4 MiB saturation/reuse |
 | [Persistent document Store](../tests/document_store_contract.goose) | Explicit owners, shared current/saved/Undo/Redo roots, 3/16/64 flat-model comparison, cross-piece edits, collection/remapping, stale IDs and failure preservation |
 | [Independent document contract](../tests/multi_document_contract.goose) | 3/16/64 pooled documents, independent Undo/selection/saved state, actual save success/failure, stale generations, budgets and 700-operation model comparison |
+| [Regex fixture](../tests/regex_experiment_fixture.py), [ECS game model](../tests/ecs_game_fixture.py), [TCP peers](../tests/server_experiment_fixture.py) | Opt-in tools: upstream regex captures/replacement, dense/sparse entity reuse, complete game states, TCP framing/backpressure and shutdown cleanup; see [workloads and reproduction](experiments/regex-ecs-server.md) |
 | [HTTP fixture](../tests/http_fixture.py), [native cancellation](../tests/cancel_contract.c) | TLS/redirect/byte limits, cancellation and handle lifetimes |
 | [HTTP clients](../tests/http_clients_contract.goose), [client fixture](../tests/http_clients_fixture.py) | 3/16/64 independent generations/serials, barrier-controlled concurrency, cancel/close/reopen, retired results, binary ownership, bounded mailboxes and full shutdown cleanup |
 | [HTTP/search composition](../tests/mixed_services_contract.goose), [flat-file and HTTP fixture](../tests/mixed_services_fixture.py) | Separate protocol owners, both shutdown directions, held exports, stale IDs/receipts, shared native token-quota refusal/retry and full registry reacquisition; see [reproduction](io/mixed-services.md) |

@@ -16,6 +16,9 @@ The [Goose pattern guide](docs/goose-patterns.md) summarizes efficient storage,
 ownership and worker composition demonstrated by the experiments.
 The [language comparison](docs/goose-language-comparison.md) explains why these
 patterns fit Goose and how they relate to C++, Rust, Go and Zig.
+Opt-in [regex, ECS game and TCP server workloads](docs/experiments/regex-ecs-server.md)
+extend those experiments to compiled matching plans, dense components and
+actual network request handling.
 
 ## What's here
 

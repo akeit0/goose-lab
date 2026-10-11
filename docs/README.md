@@ -44,6 +44,8 @@ Go and Zig.
 - [Buffer storage experiments](experiments/buffer-storage.md): geometric runs,
   linked pool chunks and the indexed Goose library under mixed growth, non-LIFO
   retirement and reopening.
+- [Regex, ECS game and TCP server experiments](experiments/regex-ecs-server.md):
+  compiled-plan reuse, dense components and bounded connection progress.
 
 Library guides describe current APIs, ownership, errors and limits. Application
 guides describe complete workflows and their domain-specific rules. Put shared

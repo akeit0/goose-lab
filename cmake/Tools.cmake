@@ -1,6 +1,25 @@
 goose_lab_program(document_profile tools/experiments/document_profile.goose MODULE_DIRS "${GOOSE_LAB_SOURCE_DIR}/tools")
 goose_lab_program(document_store_profile tools/experiments/document_store_profile.goose MODULE_DIRS "${GOOSE_LAB_SOURCE_DIR}/tools")
+set(workloads "${GOOSE_LAB_SOURCE_DIR}/tools/experiments/workloads")
+goose_lab_program(regex_experiment "${workloads}/regex_probe.goose" MODULE_DIRS "${workloads}")
+goose_lab_program(ecs_game_experiment "${workloads}/ecs_game.goose" MODULE_DIRS "${workloads}")
+goose_lab_program(server_experiment "${workloads}/server.goose" MODULE_DIRS "${workloads}")
+target_sources(server_experiment PRIVATE "${workloads}/server_transport.c")
+if(WIN32)
+  target_link_libraries(server_experiment PRIVATE ws2_32)
+endif()
+if(MSVC)
+  set_source_files_properties("${workloads}/server_transport.c" PROPERTIES COMPILE_OPTIONS /W4)
+else()
+  set_source_files_properties("${workloads}/server_transport.c" PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra;-Wpedantic")
+endif()
 if(GOOSE_LAB_BUILD_TESTS)
+  add_test(NAME regex_experiment COMMAND "${Python3_EXECUTABLE}"
+    "${GOOSE_LAB_SOURCE_DIR}/tests/regex_experiment_fixture.py" $<TARGET_FILE:regex_experiment>)
+  add_test(NAME ecs_game_experiment COMMAND "${Python3_EXECUTABLE}"
+    "${GOOSE_LAB_SOURCE_DIR}/tests/ecs_game_fixture.py" $<TARGET_FILE:ecs_game_experiment>)
+  add_test(NAME server_experiment COMMAND "${Python3_EXECUTABLE}"
+    "${GOOSE_LAB_SOURCE_DIR}/tests/server_experiment_fixture.py" $<TARGET_FILE:server_experiment>)
   add_test(NAME document_experiment_smoke COMMAND "${Python3_EXECUTABLE}"
     "${GOOSE_LAB_SOURCE_DIR}/tests/document_experiment_fixture.py"
     "${GOOSE_LAB_SOURCE_DIR}/tools/document_experiment.py" "${CMAKE_CURRENT_BINARY_DIR}" "$<CONFIG>")
