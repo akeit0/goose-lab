@@ -1,4 +1,4 @@
-"""Qualify HTTP lifetimes or HTTP/search composition at Goose O0/O1/O2 on Windows/MSVC."""
+"""Qualify HTTP lifetimes, composition or fair admission at Goose O0/O1/O2 on Windows/MSVC."""
 import argparse
 import importlib.util
 import json
@@ -27,12 +27,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", default="build-core")
     parser.add_argument("--configuration", default="Release")
-    parser.add_argument("--contract", choices=("http_clients", "mixed_services"), default="http_clients")
+    parser.add_argument("--contract", choices=("http_clients", "mixed_services", "admission_services"), default="http_clients")
+    parser.add_argument("--cycles", type=int, help="Admission reuse cycles per process (default 128)")
+    parser.add_argument("--levels", nargs="+", type=int, choices=(0, 1, 2), default=[0, 1, 2])
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     if os.name != "nt" or args.configuration != "Release" or not 1 <= args.repeats <= 20:
         parser.error("This qualification requires Windows/MSVC Release and 1..20 repeats")
+    if args.cycles is not None and (args.contract != "admission_services" or not 1 <= args.cycles <= 4096):
+        parser.error("--cycles requires admission_services and a value in 1..4096")
     build = Path(args.build).resolve(); output = Path(args.output).resolve()
     program = args.contract + "_contract"
     if output.exists():
@@ -67,7 +71,7 @@ def main():
                            (ROOT / "tools/run.py", "run.py"), (ROOT / "tools/profile.py", "profile.py"),
                            (checkout / "scripts/toolchain.py", "toolchain.py")):
         shutil.copyfile(source, sources / target)
-    if args.contract == "mixed_services":
+    if args.contract in ("mixed_services", "admission_services"):
         shutil.copyfile(ROOT / "tests/http_clients_fixture.py", sources / "http_clients_fixture.py")
         sys.path.insert(0, str(sources))
     libraries, library_hashes = [], {}
@@ -88,6 +92,9 @@ def main():
               "native_archives": library_hashes, "link_inputs": libraries, "native_defines": defines,
               "source_sha256": {str(p.relative_to(sources)): digest(p) for p in sources.rglob("*") if p.is_file()},
               "repeats": args.repeats, "levels": [], "limits": "Loopback correctness qualification; no speed or queue/RSS memory ranking."}
+    if args.contract == "admission_services":
+        record["cycles_per_process"] = args.cycles or 128
+        record["limits"] = "Admission order and resource reuse with quiescent process-memory observations; not hours of uptime, throughput fairness, or proof of OS-memory release."
     extra = ["/utf-8", "/MT", "/F67108864", f"/I{sources / 'native'}"]
     fixture = load("qualified_" + args.contract + "_fixture", sources / "fixture.py")
 
@@ -96,7 +103,7 @@ def main():
 
     save()
     try:
-        for level in (0, 1, 2):
+        for level in sorted(set(args.levels)):
             generated = output / f"contract-O{level}.c"; binary = generated.with_suffix(".exe")
             command = [str(compiler), f"-O{level}", "--stdlib", str(sources / "stdlib"), "--module-dir", str(sources / "lib"),
                        "--standalone", "--include", str(sources / "native/goose_lab.h"), "-o", str(generated), str(sources / "contract.goose")]
@@ -109,7 +116,8 @@ def main():
             item = {"level": level, "generation_command": command, "binary_sha256": digest(binary), "generated_sha256": digest(generated), "runs": []}
             record["levels"].append(item); save()
             for repeat in range(args.repeats):
-                started = time.monotonic(); process = fixture.run(binary)
+                started = time.monotonic()
+                process = fixture.run(binary, cycles=record["cycles_per_process"]) if args.contract == "admission_services" else fixture.run(binary)
                 (output / f"O{level}-{repeat}.stdout").write_text(process.stdout, encoding="utf-8")
                 (output / f"O{level}-{repeat}.stderr").write_text(process.stderr, encoding="utf-8")
                 metrics = fixture.validate(process.stdout)
@@ -118,9 +126,12 @@ def main():
                     run.update(model_requests=996, checked_rows=metrics)
                 else:
                     run.update(metrics)
+                if args.contract == "admission_services":
+                    run.update(process.observations)
                 item["runs"].append(run)
                 save(); print(f"O{level}, repeat {repeat + 1}: passed", flush=True)
-        generated = output / "contract-O1.c"
+        record["layout_goose_level"] = min(args.levels)
+        generated = output / f"contract-O{record['layout_goose_level']}.c"
         typename = re.search(r"typedef struct (lab_net_http_clients_Service_\w+)\b", generated.read_text(encoding="utf-8"))
         if not typename:
             raise RuntimeError("Cannot identify generated Service representation")

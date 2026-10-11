@@ -72,3 +72,95 @@ recovery for this workload. It does not establish fair admission, long-session
 RSS behavior, UI adoption or dynamic queue instances. The runner's 156188-byte
 layout measurement is the HTTP Service alone, excluding the search owner,
 payload backing, queues, worker stacks and native allocations.
+
+## Fair host admission and repeated reuse
+
+[`lab.io.admission`](../../lib/lab/io/admission.goose) adds an explicit host-owned
+Queue of bounded demand descriptors. It has up to eight domains and 128 pending
+entries, with round-robin domain selection and FIFO tickets within each domain.
+The caller keeps request payloads in its own bounded store and uses `Demand.key`
+to find them. The queue owns no worker, native token or protocol Service, and
+needs no native target. Its fixed records do not combine resizable Service tails.
+The representation reserves all 128 descriptors even with a smaller pending
+limit. Enqueue/removal scan at most 128 records; selection scans at most eight
+domains times 128 records. This avoids per-demand payload allocation and shifting
+survivors, with a deliberate fixed-table cost appropriate to a small bounded set.
+
+Use the operations in this order:
+
+1. `enqueue(queue, domain, key)` retains demand; a duplicate pending domain/key
+   returns BUSY, and a full queue returns LIMIT without consuming a ticket.
+2. Poll all protocol owners, then `peek(queue, eligible_mask)` selects demand.
+   Exclude domains whose own Service cannot currently start work.
+3. Submit through the selected Service. On success, `accept(queue, ticket)`
+   removes demand and gives the next domain its turn. On shared native LIMIT,
+   leave demand and cursor unchanged, stop admission, poll owners and retry.
+4. `cancel(queue, ticket)` removes pending demand without changing the turn.
+   Cancelling a Flight already admitted is still the protocol Service's job.
+
+Fairness is an admission-order property for eligible domains that follow this
+policy. A continually eligible domain with demand gets a turn within at most
+`limits.domains` successful admissions. A held search page can still
+occupy the only native slot indefinitely; the queue cannot grant capacity,
+complete work, impose a deadline or make other native token users cooperate.
+Tickets are scoped to one Queue lifetime; keep the owner and cancel obsolete
+demand when its external request identity changes.
+
+The [admission contract](../../tests/admission_services_contract.goose) and
+[independent fixture](../../tests/admission_services_fixture.py) check 1800
+operations against a Python list model across 2/3/8 domains, including eligibility
+masks, FIFO order, cancellation, stale tickets, duplicate keys and bounded refusal.
+The real workload keeps the same HTTP/search owners alive across reuse cycles.
+Four HTTP requests compete with one search for a single free native token slot;
+search gets its turn before the HTTP backlog drains. Every cycle also exercises
+full-quota refusal, variable HTTP payloads, held-page cancellation, client slot
+generation changes, and full native token/loop/read/listing reacquisition.
+An exported HTTP body remains owned throughout all cycles.
+
+CTest uses 16 cycles. For longer reuse observations with source/archive snapshots:
+
+```text
+cmake --build build-core --config Release --target admission_services_contract --parallel
+ctest --test-dir build-core -C Release -R ^admission_services_contract$ --output-on-failure
+python tools/http_clients_qualification.py --build build-core --contract admission_services --cycles 128 --repeats 1 --output local/admission-services-run
+python tools/http_clients_qualification.py --build build-core --contract admission_services --cycles 512 --levels 1 --repeats 1 --output local/admission-services-long-run
+```
+
+The fixture samples the child process's RSS/private bytes through the existing
+OS-memory reader every eight completed cycles and at the final cycle. The sample
+is taken while a synchronous loopback checkpoint request is active and both
+Services have drained their Flights/mailboxes. Samples include live workers,
+retained allocations, runtime and native transport state; they are observations,
+not a test that the OS returns memory. The record also retains each cycle's arena
+lengths and high-water value, checked separately from total process memory.
+
+The Windows/MSVC qualification on 2026-10-11 passed:
+
+| Goose optimization | Cycles in one process | Successful admissions | Independently checked search hits | Elapsed seconds |
+| --- | ---: | ---: | ---: | ---: |
+| O0 | 128 | 640 | 10240 | 52.67 |
+| O1 | 128 | 640 | 10240 | 52.86 |
+| O2 | 128 | 640 | 10240 | 52.27 |
+| O1 extended | 512 | 2560 | 40960 | 209.41 |
+
+Across these four processes, 896 reuse cycles checked 4480 admissions, 3584 HTTP
+results, 71680 flat-model hits and 1792 quota refusals. All native registries were
+fully reacquired 900 times, including final shutdown. Queue traces checked 7200
+list-model operations. Core contracts and rebuilt experiment smoke checks all
+passed, covering 19 CTest cases; the new target also built in the GUI configuration.
+
+The 512-cycle process took 64 memory checkpoints. RSS ranged from 18964480 to
+20430848 bytes, and private bytes from 47149056 to 48582656. Private-byte peaks
+did not exceed 48582656 in any of the last four 64-cycle windows; the final sample was
+48562176. This is a bounded, fluctuating observation over about 3.5 minutes, not
+proof of leak-free indefinite operation. HTTP retained arena length never
+exceeded 12288 bytes, and search arena high-water stayed at 2108 bytes. Logical
+mailboxes/Flights were empty before each checkpoint; worker/runtime/native
+allocation retention remains separate from those counters.
+
+Both qualifications used compiler `71e848d732362a47ee7fe000a3e1601d0196259a`.
+Immutable source/archive snapshots and complete records remain under ignored
+`local/references/admission-services/development-run/` and `extended-run/`.
+Records include the new working-tree sources and their hashes. A selected-level
+O2 run of the existing HTTP contract also passed its 996-request oracle, checking
+that the runner still supports the original contract without an O1 layout input.

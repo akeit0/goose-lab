@@ -13,7 +13,7 @@ For choosing a representation, see [useful storage and lifetime patterns](goose-
 | `lab.collections` | [`byte_buffer`](../lib/lab/collections/byte_buffer.goose), [`tree`](../lib/lab/collections/tree.goose), [`state_bank`](../lib/lab/collections/state_bank.goose) | Pure Goose |
 | `lab.text` | [`utf8`](../lib/lab/text/utf8.goose), [`grapheme`](../lib/lab/text/grapheme.goose), [`line_break`](../lib/lab/text/line_break.goose), [`strings`](../lib/lab/text/strings.goose), [`line_index`](../lib/lab/text/line_index.goose), [`literal_search`](../lib/lab/text/literal_search.goose), [`selection`](../lib/lab/text/selection.goose), [`diff`](../lib/lab/text/diff.goose) | Pure Goose; [text foundation](ui/text-foundation.md) |
 | `lab.json` | [`codec`](../lib/lab/json/codec.goose), [`edit`](../lib/lab/json/edit.goose), [`file`](../lib/lab/json/file.goose) | `file` needs `goose_lab_files`; [JSON](data/json.md) |
-| `lab.io` | [`event_loop`](../lib/lab/io/event_loop.goose), [`cancel`](../lib/lab/io/cancel.goose), [`stream`](../lib/lab/io/stream.goose), [`process`](../lib/lab/io/process.goose), [`process_stream`](../lib/lab/io/process_stream.goose), [`console`](../lib/lab/io/console.goose), [`timer`](../lib/lab/io/timer.goose), [`debounce`](../lib/lab/io/debounce.goose) | `goose_lab_loop`, `goose_lab_cancel`, `goose_lab_process`, `goose_lab_console`; [I/O](io/io-core.md), [streams](io/streams.md) |
+| `lab.io` | [`admission`](../lib/lab/io/admission.goose), [`event_loop`](../lib/lab/io/event_loop.goose), [`cancel`](../lib/lab/io/cancel.goose), [`stream`](../lib/lab/io/stream.goose), [`process`](../lib/lab/io/process.goose), [`process_stream`](../lib/lab/io/process_stream.goose), [`console`](../lib/lab/io/console.goose), [`timer`](../lib/lab/io/timer.goose), [`debounce`](../lib/lab/io/debounce.goose) | `admission` is pure Goose; `goose_lab_loop`, `goose_lab_cancel`, `goose_lab_process`, `goose_lab_console`; [I/O](io/io-core.md), [streams](io/streams.md) |
 | `lab.fs` | [`path`](../lib/lab/fs/path.goose), [`glob`](../lib/lab/fs/glob.goose), [`files`](../lib/lab/fs/files.goose), [`async_files`](../lib/lab/fs/async_files.goose), [`watch`](../lib/lab/fs/watch.goose), [`storage`](../lib/lab/fs/storage.goose), [`explorer`](../lib/lab/fs/explorer.goose), [`search`](../lib/lab/fs/search.goose), [`search_client`](../lib/lab/fs/search_client.goose), [`search_clients`](../lib/lab/fs/search_clients.goose), [`search_codec`](../lib/lab/fs/search_codec.goose) | `goose_lab_path`, `goose_lab_files`, `goose_lab_loop`, `goose_lab_watch`; [files](io/async-files.md), [search streams](io/streams.md) |
 | `lab.net` | [`http`](../lib/lab/net/http.goose), [`http_clients`](../lib/lab/net/http_clients.goose) | `goose_lab_http`; [transport](design.md#http), [independent clients](io/http-clients.md) |
 | `lab.git` | [`repository`](../lib/lab/git/repository.goose), [`batch`](../lib/lab/git/batch.goose), [`client`](../lib/lab/git/client.goose), [`history`](../lib/lab/git/history.goose), [`object`](../lib/lab/git/object.goose), [`tree`](../lib/lab/git/tree.goose) | Process/file/loop services; [Git](apps/git-viewer.md) |
@@ -38,6 +38,11 @@ translation unit. `native/goose_lab.h` selects adapters through feature definiti
 provided by the linked targets. See [architecture](architecture.md#native-code).
 
 ## Ownership and execution
+
+[`lab.io.admission`](../lib/lab/io/admission.goose) is a pure Goose bounded demand
+queue for round-robin admission across separate owners. It keeps fixed domain/key
+records rather than request payloads or native resources; see
+[shared capacity and reuse](io/mixed-services.md#fair-host-admission-and-repeated-reuse).
 
 [`lab.buffer.slot_arena`](../lib/lab/buffer/slot_arena.goose) stores variable byte
 values in caller-assigned slots with hole reuse and deferred compaction. Its

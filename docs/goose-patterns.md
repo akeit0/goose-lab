@@ -19,6 +19,7 @@ claims. The linked guides contain bounds, contracts and reproduction commands.
 | Small bounded sets of replaceable variable values | [Slot arena](buffer/slot-arena.md) with hole reuse and deferred compaction | Moving survivors on every removal; large chunk-directory reservations | Retained holes, bounded table scans and occasional compaction |
 | Middle edits with retained Undo/Redo and saved versions | [Persistent piece tree](document/store.md) in a shared owner | Full-text copying for each history entry; unchanged spans/nodes can be shared | New nodes, retained source bytes, collection and prefix-growth moves |
 | Short-lived, sparsely populated result pages | [Compact packets and ready-payload arena](io/streams.md) | Serializing unused fixed-array capacity and reserving a full payload per mailbox | Encode/decode/export copies, retained holes and pressure compaction |
+| Cooperative admission across owners sharing a native quota | [Bounded demand descriptors](io/mixed-services.md#fair-host-admission-and-repeated-reuse) with domain turns and FIFO tickets | Copying request payloads during refusal/retry; combining unrelated owners | 128 reserved records, bounded scans, explicit eligibility and completion polling |
 | A few unrelated resizable subsystems | [Separate local owners](goose-feedback.md#composing-document-and-git-pages) plus borrowed references | Combining unrelated storage into one arena | Caller coordinates lifetime and passes each owner explicitly |
 
 These choices compose. HTTP clients use indexed storage for variable result
@@ -205,6 +206,15 @@ owner contributes to the same 64-slot process limit. Treat admission refusal as
 recoverable without advancing request identity; poll completions before retrying.
 This supports separate protocol owners, while one owner per identical protocol
 remains the rule.
+
+When owners share a native quota, keep admission policy in a small separate
+fixed-record owner. [`lab.io.admission`](io/mixed-services.md#fair-host-admission-and-repeated-reuse)
+holds bounded demand keys, rotates among eligible domains after successful
+admission, and keeps FIFO order within each domain. Request payloads and Flights
+remain owned by their existing stores and Services. Shared-capacity refusal
+preserves the selected turn until polling frees capacity; a caller skips domains
+blocked by their local limits using an eligibility mask. This verifies admission
+order without claiming equal completion time or manufacturing native credits.
 
 Give each producer one unACKed data page. Polling or taking does not grant
 credit; explicit ACK/discard does. Keeping a page can stall that producer while

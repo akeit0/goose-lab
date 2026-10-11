@@ -23,8 +23,8 @@ cmake --build build-core --config Release --parallel
 ctest --test-dir build-core -C Release --output-on-failure
 ```
 
-With samples and tests enabled, the GUI configuration registers 34 checks and
-the GUI-free configuration registers 16. Enabling manual tools adds the
+With samples and tests enabled, the GUI configuration registers 35 checks and
+the GUI-free configuration registers 17. Enabling manual tools adds the
 `document_experiment_smoke` and `document_store_experiment_smoke` checks. Tests use loopback HTTP/TLS fixtures,
 temporary Git repositories and temporary files. Python fixtures do not contact
 public services. The checked-in TLS key is only a localhost test fixture.
@@ -45,6 +45,7 @@ still requires a working GPU/backend; it is not a software renderer.
 | [HTTP fixture](../tests/http_fixture.py), [native cancellation](../tests/cancel_contract.c) | TLS/redirect/byte limits, cancellation and handle lifetimes |
 | [HTTP clients](../tests/http_clients_contract.goose), [client fixture](../tests/http_clients_fixture.py) | 3/16/64 independent generations/serials, barrier-controlled concurrency, cancel/close/reopen, retired results, binary ownership, bounded mailboxes and full shutdown cleanup |
 | [HTTP/search composition](../tests/mixed_services_contract.goose), [flat-file and HTTP fixture](../tests/mixed_services_fixture.py) | Separate protocol owners, both shutdown directions, held exports, stale IDs/receipts, shared native token-quota refusal/retry and full registry reacquisition; see [reproduction](io/mixed-services.md) |
+| [Fair admission and reuse](../tests/admission_services_contract.goose), [list-model fixture](../tests/admission_services_fixture.py) | 1800 independent queue operations, one-slot HTTP/search contention, persistent owner reuse, cancellation/generations, full native capacity reacquisition and process-memory checkpoints; see [policy and reproduction](io/mixed-services.md#fair-host-admission-and-repeated-reuse) |
 | [Stream/ACK contract](../tests/stream_contract.goose), [real search](../tests/search_stream_contract.goose), [independent fixture](../tests/stream_fixture.py) | Typed ACK isolation, stalled consumers, 100 ACK/Cancel races, retired pages, bounded shutdown, 3/16/64 streams, flat-file positions/previews, compact codec, byte/compaction oracles and native handle reacquisition |
 | [JSON corpus](../tests/json_corpus.py) | Independent decoding, round trips and malformed/bounded inputs |
 | [Workbench fixture](../tests/workbench_fixture.py) | Edit/save/Git/search navigation, tabs/cursor restoration, Help/modal routing, initial Git modes, a subdirectory workspace, dirty-close decisions, idle frames and resource ownership |

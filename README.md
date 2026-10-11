@@ -104,6 +104,9 @@ loopback lifecycle contract at Goose `-O0/-O1/-O2` on the selected fork.
 sharing native capacity: one Service can stop while the other continues, and
 token-quota refusal preserves request identity until admission can be retried.
 The same qualification runner supports `--contract mixed_services`.
+The [bounded admission queue](docs/io/mixed-services.md#fair-host-admission-and-repeated-reuse)
+keeps domain turns and FIFO demand keys separate from the protocol owners;
+`--contract admission_services` verifies shared-capacity order and sustained reuse.
 
 [Bounded search streams](docs/io/streams.md) add explicit page ACKs on distinct
 typed worker lanes, stalled-consumer/cancellation checks and 3/16/64 real searches
