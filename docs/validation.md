@@ -23,8 +23,8 @@ cmake --build build-core --config Release --parallel
 ctest --test-dir build-core -C Release --output-on-failure
 ```
 
-With samples and tests enabled, the GUI configuration registers 41 checks and
-the GUI-free configuration registers 22. Enabling manual tools adds five checks:
+With samples and tests enabled, the GUI configuration registers 43 checks and
+the GUI-free configuration registers 24. Enabling manual tools adds five checks:
 `document_experiment_smoke`, `document_store_experiment_smoke` and the
 [regex/ECS/server experiments](experiments/regex-ecs-server.md).
 Tests use loopback TCP/HTTP/TLS fixtures,
@@ -40,7 +40,7 @@ still requires a working GPU/backend; it is not a software renderer.
 | Check sources | Main coverage |
 | --- | --- |
 | [ECS contract](../tests/ecs_contract.goose), [line transport contract](../tests/line_server_contract.goose) | 9000 independent component operations, stale generations, two simultaneous servers, queued-command refusal, pending-output deadline and native socket cleanup |
-| [Arena integration](../tests/arena_fixture.py), [client contract](../tests/arena_client_contract.goose), [graphics fixture](../tests/arena_graphics_fixture.py) | Shared two-peer game state against an independent model, fragmented input, reset/game over, complete snapshot adoption, invalid/partial frames and optional real-server GPU rendering |
+| [Arena game](../tests/arena_game_contract.goose), [dictionary model](../tests/arena_fixture.py), [client contract](../tests/arena_client_contract.goose), [runtime fixture](../tests/arena_runtime_fixture.py), [graphics fixture](../tests/arena_graphics_fixture.py) | Socket-free offline practice; independent versus players, pushed state, per-player inputs/ACKs, winner/restart, reconnect generations, prediction correction, 350ms delayed/fragmented state and offline/two-client GPU rendering |
 | [Utility contract](../tests/utils_contract.goose) | Piece-tree edits against a flat-string oracle, live-root collection, Unicode boundaries and pure utilities |
 | [Indexed buffer contract](../tests/indexed_buffer_contract.goose) | 3/16/64 independent buffers, flat-array oracle, multi-byte writes, stale IDs, two Stores, whole-request refusal, owned exports and 4096-chunk saturation/reuse |
 | [Slot arena contract](../tests/slot_arena_contract.goose), [flat Python model](../tests/slot_arena_fixture.py) | 27000 variable-value operations at 3/16/64 slots, all payloads checked after each operation, holes/overlap/compaction, unchanged refusal, owned exports and 4 MiB saturation/reuse |

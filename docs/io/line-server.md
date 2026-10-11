@@ -38,6 +38,15 @@ their capacity is needed. Owned unsent output survives callbacks and would-block
 Oversized handler replies close the peer with an error; application side effects
 are not rolled back, so handlers must honor their configured response bound.
 
+`send(service, id, borrowed_bytes)` admits 1..2048 unsolicited bytes and copies
+them into the same bounded FIFO. It reports false for stale/closing peers or
+insufficient capacity, preserving bytes and offsets on refusal. `pending`
+returns unsent byte count, or -1 for a stale ID. Admission confirms local queue
+ownership, not delivery. The transport does not invent message framing: include
+your own LF/packet boundaries. It does not choose a broadcast rate or replace
+old messages. The arena sample admits state only when pending is zero, then
+skips busy peers until it can publish newer state.
+
 Options include send_bytes (1..2048), an optional requested OS send_buffer,
 idle_ms (0 disables idle closure), and drain_ms (1..60000). Supply monotonic
 nanoseconds. Idle peers close; drain deadlines force release when peers never
@@ -64,15 +73,17 @@ line and refuses embedded CR/LF or an occupied queue without changing it. A
 preserves the remainder. EOF, transport errors and an unterminated full buffer
 are explicit codes. Complete buffered lines remain readable after EOF.
 
-The application correlates replies and supplies request deadlines. The arena
-client permits one outstanding command and publishes snapshots only after END,
-the declared count and all records validate. Transport knows no snapshot type.
+The application correlates replies and supplies deadlines. The arena sends
+numbered input steps independently of pushed state and publishes snapshots only
+after END, the declared counts and all records validate. Transport knows no
+snapshot type, player ownership, input acknowledgement or prediction policy.
 Destroy both successful and failed owners.
 
 ## Verification
 
 The [contract](../../tests/line_server_contract.goose) runs two independent Services
-and clients in one process, checking queue refusal, stale connection/native IDs,
+and clients in one process, checking unsolicited pushes and unchanged queue
+capacity/stale refusal, stale connection/native IDs,
 slot reuse, a pending-output drain timeout, and one owner closing while another
 still echoes. The [TCP fixture](../../tests/server_experiment_fixture.py) checks
 actual kernel would-block, another peer progressing, exact resumed response

@@ -68,6 +68,19 @@ fn reply(s: Service&, slot: i64, response: const Reply&, now: i64) {
     if response.action == CLOSE { closing(c, now); }
     if response.action == STOP { stop(s, now); }
 }
+// Push application-owned bytes without waiting for a request. Refusal changes
+// no queue bytes/offsets; callers can skip stale state and retry a newer update.
+fn pending(s: const Service&, id: Id) -> i64 {
+    if !valid(s, id) { return -1; }
+    s.clients[id.slot].output.len - s.clients[id.slot].sent
+}
+fn send(s: Service&, id: Id, bytes: const u8[:]) -> bool {
+    if !valid(s, id) || s.clients[id.slot].closing || bytes.len == 0 || bytes.len > 2048 { return false; }
+    let c .= s.clients[id.slot];
+    if bytes.len > 2048 - (c.output.len - c.sent) { return false; }
+    assert(reserve(c, s.counters, bytes.len)); c.output.append(bytes);
+    s.counters.output_peak = max(s.counters.output_peak, c.output.len); true
+}
 // F(id, borrowed line, CONNECTED/REQUEST) -> owned Reply. One request per peer per
 // pass, rotating the first peer. Handler output must fit Options.response_bytes.
 fn poll<F>(s: Service&, now: i64) {

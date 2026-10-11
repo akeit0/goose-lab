@@ -83,8 +83,9 @@ defaults live in `cmake/Fonts.cmake`.
 
 `lab.ecs` supplies generic identity and component storage; `lab.net.line_server`
 supplies framing, connection progress and bounded shutdown. The arena's component
-schema, collision rules, waves, score, command protocol and presentation live in
-`samples/arena`. Experiments reuse that sample World through the samples module
+schema, pickup rules, player ownership, input prediction, score, command protocol
+and presentation live in `samples/arena`. The playable game's pure simulation
+also runs offline. Experiments reuse the separate projectile World through the samples module
 root. Neither the libraries nor the native socket adapter depend on game code.
 
 Each directory under `samples` owns its application's entry point and models.

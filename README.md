@@ -19,8 +19,9 @@ patterns fit Goose and how they relate to C++, Rust, Go and Zig.
 Opt-in [regex, ECS game and TCP server workloads](docs/experiments/regex-ecs-server.md)
 extend those experiments to compiled matching plans, dense components and
 actual network request handling.
-The [local arena](docs/apps/arena.md) uses reusable ECS and line-transport libraries
-with an authoritative server, CLI clients and an optional graphical client.
+The [Star Race sample](docs/apps/arena.md) uses reusable ECS and line-transport
+libraries for socket-free practice or multiplayer versus with an authoritative
+server, predicted controls and optional graphics.
 
 ## What's here
 
@@ -75,6 +76,16 @@ font paths belong in ignored `CMakeUserPresets.json`; see
 [local development](docs/local-development.md).
 
 ## Try the applications
+
+Run the built executables directly on Windows; Python is optional:
+
+```powershell
+.\build\Release\workbench.exe --root . --file samples/data/emoji.txt
+.\build\Release\arena_game.exe --solo
+```
+
+[Star Race](docs/apps/arena.md) also documents direct server/client versus startup
+and an application-only build without Python. Optional launcher examples:
 
 ```text
 python tools/run.py workbench --root . --file samples/data/emoji.txt

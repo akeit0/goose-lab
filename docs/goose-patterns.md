@@ -24,7 +24,7 @@ and separates language guarantees from application policy.
 | Short-lived, sparsely populated result pages | [Compact packets and ready-payload arena](io/streams.md) | Serializing unused fixed-array capacity and reserving a full payload per mailbox | Encode/decode/export copies, retained holes and pressure compaction |
 | Cooperative admission across owners sharing a native quota | [Bounded demand descriptors](io/mixed-services.md#fair-host-admission-and-repeated-reuse) with domain turns and FIFO tickets | Copying request payloads during refusal/retry; combining unrelated owners | 128 reserved records, bounded scans, explicit eligibility and completion polling |
 | A few unrelated resizable subsystems | [Separate local owners](goose-feedback.md#composing-document-and-git-pages) plus borrowed references | Combining unrelated storage into one arena | Caller coordinates lifetime and passes each owner explicitly |
-| Small entity sets with optional components | [Generation IDs and dense maps](ecs.md), composed as SoA in the [arena sample](apps/arena.md) | Per-entity allocation and searching all entities for each component | Fixed capacity, map repair on swap-removal and deferred structural changes |
+| Small entity sets with optional components | [Generation IDs and dense maps](ecs.md), with typed AoS stores or explicit SoA columns | Per-entity allocation and searching all entities for each component | Fixed capacity, map repair on swap-removal and deferred structural changes |
 
 These choices compose. HTTP clients use indexed storage for variable result
 bytes; a document Store uses persistence for history; a stream Service retains
@@ -276,6 +276,16 @@ monotonic clock. The [arena client](apps/arena.md) parses into a fixed pending
 snapshot and publishes it only after a complete, validated END frame. Network
 progress and application-state adoption are separate operations; neither stores
 a borrowed view after its call ends.
+
+Star Race's offline and versus modes use the same pure rules and fixed view
+schema. The network controller owns a bounded history of numbered movement
+steps; it drops acknowledged steps and replays the rest after authoritative
+correction. The server pushes state independently of requests and admits at most
+one pending state packet per peer, skipping busy peers until newer state can be
+sent. These are sample policies, not ECS or transport responsibilities. Owned
+copies are deliberate where values must survive later ticks or callbacks;
+mutable component access uses an explicit borrow rather than copying the value
+returned by a reference accessor. See [mode and communication contracts](apps/arena.md).
 
 The same principle applies outside arenas. Compare a no-op edit against borrowed
 spans, query aggregates or accessors instead of flattening, and retain only the

@@ -23,6 +23,18 @@ fn main() {
     var first = lab_net_line_client::connect(a.port); var other = lab_net_line_client::connect(b.port);
     receive(a, first, "WELCOME"); receive(b, other, "WELCOME");
     let old = lab_net_line_server::Id { 0, 1 }; assert(lab_net_line_server::valid(a, old));
+    // Unsolicited pushes share the bounded FIFO; failed capacity/stale checks
+    // preserve bytes and offsets, including when compaction would be required.
+    assert(lab_net_line_server::send(a, old, "PUSH\n")); receive(a, first, "PUSH");
+    var large: u8[..2048] = []; for i in 2048 { large.push('x'); }
+    assert(lab_net_line_server::send(a, old, large)); let queued = to_bytes([a]);
+    assert(!lab_net_line_server::send(a, old, "another") && to_bytes([a]) == queued);
+    assert(!lab_net_line_server::send(a, lab_net_line_server::Id { 0, 99 }, "stale") && to_bytes([a]) == queued);
+    // Retire this peer rather than wasting thousands of one-byte test writes.
+    lab_net_line_client::destroy(first); lab_net_line_server::stop(a, clock_ns());
+    echo(a, clock_ns() + 2000000); lab_net_line_server::destroy(a);
+    a = lab_net_line_server::create(lab_net_line_server::Options { connections: 1, response_bytes: 64, send_bytes: 1, drain_ms: 1 });
+    first = lab_net_line_client::connect(a.port); receive(a, first, "WELCOME");
     assert(lab_net_line_client::send(first, "retained")); let image = to_bytes([first]);
     assert(!lab_net_line_client::send(first, "other") && to_bytes([first]) == image); receive(a, first, "ECHO retained");
     let socket = first.socket; lab_net_line_client::destroy(first); assert(!lab_net_tcp::close(socket));

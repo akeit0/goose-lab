@@ -13,10 +13,13 @@ first; see the [root build guide](../README.md#build) and
 
 ```text
 cmake --build build --config Release --target workbench --parallel
-python tools/run.py workbench --root . --file README.md
+build/Release/workbench.exe --root . --file README.md
 ```
 
-The same launcher works with single- and multi-configuration CMake builds and
+That executable path is the Windows multi-configuration layout. Single-configuration
+builds put programs directly in the build directory. Python is optional for
+launching; the [Star Race guide](../docs/apps/arena.md) shows offline and versus
+startup using executables only. The optional launcher works with single- and multi-configuration CMake builds and
 platform executable suffixes. Use `python3` if that is your Python 3 command.
 Launcher options precede the target, for example:
 
@@ -24,9 +27,8 @@ Launcher options precede the target, for example:
 python tools/run.py --build build/gui --configuration Release workbench --root .
 ```
 
-Python is optional for launching; the built applications can run directly.
 Windows is currently tested. Linux/macOS need native validation; the build and
-commands are intended to work without PowerShell. GUI samples require the Goose
+commands are intended to work without PowerShell. GUI samples require this lab's
 SDL submodule and available fonts; non-Windows HTTPS also needs OpenSSL development
 files. Build samples without contract tests with `-DGOOSE_LAB_BUILD_TESTS=OFF`.
 
@@ -38,7 +40,7 @@ files. Build samples without contract tests with `-DGOOSE_LAB_BUILD_TESTS=OFF`.
 | API Browser | HTTP requests, asynchronous results, JSON records and explicit snapshot saving | [README](api_browser/README.md) |
 | Task Inbox | Editable records, persistent storage and failed-save recovery | [README](task_inbox/README.md) |
 | Component Gallery | Controls, state changes and responsive Clay layout | [README](component_gallery/README.md) |
-| Arena | Authoritative ECS game server, CLI peers and optional graphics | [README](arena/README.md) |
+| Star Race | Offline practice or multiplayer versus, predicted movement and optional graphics | [README](arena/README.md) |
 | CLI samples | HTTP, process streams, files, JSON, Git and search without a GUI | [README](cli/README.md) |
 | Data | Unicode/emoji input for the editor | [emoji.txt](data/emoji.txt) |
 

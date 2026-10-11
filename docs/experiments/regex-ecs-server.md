@@ -5,6 +5,9 @@ live under [`tools/experiments/workloads`](../../tools/experiments/workloads).
 The game World now lives in the [arena sample](../apps/arena.md), while generic
 [ECS identity/storage](../ecs.md) and [TCP line transport](../io/line-server.md)
 are reusable libraries. Game schema, rules and command protocols stay outside lib.
+This projectile World remains a focused workload. The playable arena sample now
+uses separate Star Race rules for socket-free practice and multiplayer versus;
+it does not reuse projectile difficulty or the experiment's command protocol.
 
 | Target | Workload | Goose question |
 | --- | --- | --- |

@@ -20,7 +20,9 @@ are implementation state; boundary tests deliberately seed unreachable counters.
 last row, swaps the last logical slot into the hole, and repairs the sparse map.
 The owner applies that same swap/truncation to every parallel column. `check`
 verifies both map directions. This supports SoA without prescribing a schema:
-the arena's Position, Velocity and Health each own an Index and separate columns.
+the separate projectile workload's Position, Velocity and Health each own an
+Index and separate columns. The playable Star Race instead composes typed Body
+and Player stores, including owned fixed-capacity input queues.
 
 `Store<T>` offers an AoS alternative with owned fixed-size values. `put` validates
 the ID against its Pool. `lookup` returns an optional borrowed value and checks

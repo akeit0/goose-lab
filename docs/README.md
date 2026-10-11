@@ -31,7 +31,7 @@ Go and Zig.
 - [Git viewer](apps/git-viewer.md), [history/objects](apps/git-history.md) and [file search](apps/file-search.md).
 - [API Browser](apps/api-browser.md): HTTP, local snapshots and asynchronous UI results.
 - [Task Inbox](apps/task-inbox.md): stable records, local storage and failure handling.
-- [Local arena](apps/arena.md): an authoritative ECS game server, CLI peers and an optional graphical client.
+- [Star Race](apps/arena.md): socket-free practice or multiplayer versus, with an authoritative server, predicted controls and optional graphics.
 
 ## Development
 

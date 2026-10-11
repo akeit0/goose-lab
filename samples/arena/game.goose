@@ -1,61 +1,97 @@
-// Application policy: target waves, co-op shots and authoritative simulation.
+// Pure application simulation, shared by offline practice and network matches.
 namespace app_arena_game;
 import std;
-import arena.world;
 import lab.ecs.pool;
-import lab.net.line_server;
-struct Game { world: app_arena_world::World = app_arena_world::World {}, misses: i64 = 0, shots: i64 = 0, wave: i64 = 0 }
-fn create() -> Game {
-    var g = Game { world: app_arena_world::create(16) };
-    for y in [-8, 0, 8] { let id, code = app_arena_world::spawn(g.world, -16, y, 1, 0, true, 1, 64, 2); assert(code == 0); }
-    g
+import lab.ecs.sparse;
+struct Peer { slot: i64 = -1, generation: u64 = 0 }
+struct Input { sequence: i64, dx: i64, dy: i64 }
+struct Body { x: i64, y: i64, kind: i32 }
+struct Player { peer: Peer, score: i64 = 0, acknowledged: i64 = 0, received: i64 = 0, inputs: Input[..8] = [] }
+struct Game { pool: lab_ecs_pool::Pool = lab_ecs_pool::Pool { capacity: 16 }, bodies: lab_ecs_sparse::Store<Body> = lab_ecs_sparse::Store<Body> {},
+    players: lab_ecs_sparse::Store<Player> = lab_ecs_sparse::Store<Player> {}, versus: bool = false,
+    ticks: i64 = 0, revision: i64 = 0, round: i64 = 1, winner: Peer = Peer {}, remaining: i64 = 0, collected: i64 = 0 }
+fn body(g: Game&, id: lab_ecs_pool::Id) -> Body& {
+    let found = lab_ecs_sparse::lookup(g.bodies, g.pool, id); assert(found); found
 }
-fn clear(g: Game&) {
-    for slot in g.world.pool.capacity {
-        let id = lab_ecs_pool::id(g.world.pool, slot); if id.slot >= 0 { assert(app_arena_world::despawn(g.world, id) == 0); }
+fn spawn(g: Game&, x: i64, y: i64, kind: i32) -> lab_ecs_pool::Id {
+    let id, code = lab_ecs_pool::acquire(g.pool); assert(code == 0);
+    assert(lab_ecs_sparse::put(g.bodies, g.pool, id, Body { x, y, kind }) == 0); id
+}
+fn erase(g: Game&, id: lab_ecs_pool::Id) {
+    assert(lab_ecs_sparse::erase(g.bodies, id)); assert(lab_ecs_pool::release(g.pool, id) == 0);
+}
+fn seed(g: Game&) { for y in [3, 7, 11, 15, 19, 23] { let id = spawn(g, 20, y, 2); } }
+fn create(versus: bool = false) -> Game { var g = Game { versus: versus }; seed(g); g }
+fn player(g: const Game&, peer: Peer) -> lab_ecs_pool::Id {
+    for slot, row in g.players.rows.slots {
+        let p .= g.players.values[row]; if p.peer.slot == peer.slot && p.peer.generation == peer.generation { return lab_ecs_pool::id(g.pool, slot); }
+    } lab_ecs_pool::Id {}
+}
+fn join(g: Game&, peer: Peer) -> bool {
+    if peer.slot < 0 || peer.slot >= 8 || peer.generation == 0 || player(g, peer).slot >= 0 { return false; }
+    var old = Peer {};
+    for p in g.players.values { if p.peer.slot == peer.slot { if p.peer.generation >= peer.generation { return false; } old = p.peer; break; } }
+    if old.slot >= 0 { leave(g, old); }
+    let id = spawn(g, if peer.slot % 2 == 0 { 4 } else { 36 }, 4 + (peer.slot / 2) * 5, 1);
+    assert(lab_ecs_sparse::put(g.players, g.pool, id, Player { peer: peer }) == 0); g.revision++; true
+}
+fn leave(g: Game&, peer: Peer) {
+    let id = player(g, peer); if id.slot < 0 { return; }
+    assert(lab_ecs_sparse::erase(g.players, id)); erase(g, id); g.revision++;
+}
+// One numbered movement step per tick, at most eight queued. Old inputs are
+// harmless duplicates; gaps, invalid axes and excess demand refuse unchanged.
+fn input(g: Game&, peer: Peer, command: Input) -> i32 {
+    let id = player(g, peer); if id.slot < 0 { return 1; }
+    if command.sequence < 1 || command.sequence > 1000000000 || command.dx < -1 || command.dx > 1 || command.dy < -1 || command.dy > 1 { return 1; }
+    let p = lab_ecs_sparse::lookup(g.players, g.pool, id); assert(p);
+    if command.sequence <= p.received { return 0; }
+    if command.sequence != p.received + 1 || p.inputs.len == 8 { return 1; }
+    p.inputs.push(command); p.received = command.sequence; 0
+}
+fn reset_round(g: Game&) {
+    // Identities, ticks and input acknowledgements survive round changes.
+    g.round++; g.winner = Peer {}; g.remaining = 0;
+    for slot, row in g.players.rows.slots {
+        let p .= g.players.values[row]; p.score = 0;
+        let b .= body(g, lab_ecs_pool::id(g.pool, slot)); b.x = if p.peer.slot % 2 == 0 { 4 } else { 36 }; b.y = 4 + (p.peer.slot / 2) * 5;
     }
-}
-fn reset(g: Game&) {
-    // Preserve identity generations across resets so previous entity IDs stay stale.
-    clear(g); g.world.ticks = 0; g.world.spawns = 0; g.world.destroyed = 0; g.world.moves = 0; g.world.collisions = 0; g.world.score = 0;
-    g.misses = 0; g.shots = 0; g.wave = 0;
-    for y in [-8, 0, 8] { let id, code = app_arena_world::spawn(g.world, -16, y, 1, 0, true, 1, 64, 2); assert(code == 0); }
+    var gems: lab_ecs_pool::Id[..6] = [];
+    for slot in g.pool.capacity { if g.pool.entities[slot].alive && g.bodies.values[g.bodies.rows.sparse[slot]].kind == 2 { gems.push(lab_ecs_pool::id(g.pool, slot)); } }
+    for id in gems { erase(g, id); } seed(g);
 }
 fn tick(g: Game&) {
-    if g.misses >= 5 { return; }
-    let w .= g.world;
-    for slot, row in w.health.rows.slots {
-        let p = w.position.rows.sparse[slot]; let v = w.velocity.rows.sparse[slot];
-        if w.health.team[row] == 2 && (w.health.ttl[row] == 1 || (v >= 0 && w.position.x[p] + w.velocity.x[v] > 32)) { g.misses++; }
+    g.ticks++; g.revision++; let waiting = g.versus && g.players.values.len < 2; let paused = g.remaining > 0 || waiting;
+    for slot, row in g.players.rows.slots {
+        let p .= g.players.values[row];
+        if p.inputs.len > 0 {
+            let command = p.inputs[0]; for i in p.inputs.len - 1 { p.inputs[i] = p.inputs[i + 1]; } p.inputs.resize(p.inputs.len - 1);
+            p.acknowledged = command.sequence;
+            if !paused { let b .= body(g, lab_ecs_pool::id(g.pool, slot)); b.x = clamp(b.x + command.dx, 0, 40); b.y = clamp(b.y + command.dy, 0, 24); }
+        }
     }
-    app_arena_world::tick(w);
-    if w.ticks % 8 == 0 {
-        let lanes = [-16, -8, 0, 8, 16]; let y = lanes[g.wave % 5]; g.wave++;
-        let id, code = app_arena_world::spawn(w, -24, y, 1, 0, true, 1, 64, 2); assert(code == 0 || code == 2);
+    if g.remaining > 0 { g.remaining--; if g.remaining == 0 { reset_round(g); } return; }
+    if waiting { return; }
+    // Contested pickups rotate peer priority each tick. A gem is collected once;
+    // respawn is a structural change after all reads of that body.
+    var gems: lab_ecs_pool::Id[..6] = [];
+    for slot in g.pool.capacity { if g.pool.entities[slot].alive && g.bodies.values[g.bodies.rows.sparse[slot]].kind == 2 { gems.push(lab_ecs_pool::id(g.pool, slot)); } }
+    for gem in gems {
+        var winner = Peer {}; let at = body(g, gem); let gx = at.x; let gy = at.y;
+        for offset in 8 {
+            let peer_slot = (g.ticks + offset) % 8;
+            for slot, row in g.players.rows.slots {
+                let p .= g.players.values[row]; if p.peer.slot != peer_slot { continue; }
+                let b = body(g, lab_ecs_pool::id(g.pool, slot));
+                if abs(b.x - gx) <= 1 && abs(b.y - gy) <= 1 { winner = p.peer; break; }
+            }
+            if winner.slot >= 0 { break; }
+        }
+        if winner.slot >= 0 {
+            let pid = player(g, winner); let p = lab_ecs_sparse::lookup(g.players, g.pool, pid); assert(p); p.score++; g.collected++;
+            let won = p.score >= 8; erase(g, gem);
+            let id = spawn(g, 8 + ((g.collected * 11) % 25), 3 + ((g.collected * 7) % 19), 2);
+            if won { g.winner = winner; g.remaining = 60; break; }
+        }
     }
-    app_arena_world::check(w);
-}
-fn snapshot(g: const Game&) -> u8[>..] {
-    var out: u8[>..] = []; let w .= g.world;
-    format(out, "FRAME ", w.ticks, " ", w.score, " ", g.misses, " ", g.shots, " ", w.pool.live, "\n");
-    for slot in w.pool.capacity { if w.pool.entities[slot].alive { format(out, "ENTITY ", app_arena_world::describe(w, lab_ecs_pool::id(w.pool, slot)), "\n"); } }
-    out.append("END\n"); assert(out.len <= 2048); out
-}
-fn route(g: Game&, line: const u8[:], manual: bool = false) -> lab_net_line_server::Reply {
-    if line == "PING" { return lab_net_line_server::Reply { bytes: str("PONG\n") }; }
-    if line == "SNAPSHOT" { return lab_net_line_server::Reply { bytes: snapshot(g) }; }
-    if line == "RESET" { reset(g); return lab_net_line_server::Reply { bytes: str("RESET\n") }; }
-    if line == "CLOSE" { return lab_net_line_server::Reply { action: lab_net_line_server::CLOSE, bytes: str("BYE\n") }; }
-    if line == "SHUTDOWN" { return lab_net_line_server::Reply { action: lab_net_line_server::STOP, bytes: str("BYE\n") }; }
-    let fields = split(line, ' ');
-    if fields.len == 2 && fields[0] == "FIRE" {
-        let y, ok = parse_int(fields[1]); if !ok || y < -20 || y > 20 || g.misses >= 5 { return lab_net_line_server::Reply { bytes: str("ERR aim\n") }; }
-        let id, code = app_arena_world::spawn(g.world, 28, y, -3, 0, true, 1, 40, 1);
-        if code != 0 { return lab_net_line_server::Reply { bytes: str("ERR capacity\n") }; }
-        g.shots++; return lab_net_line_server::Reply { bytes: str("FIRED ", id.slot, " ", id.generation, "\n") };
-    }
-    if manual && fields.len == 2 && fields[0] == "STEP" {
-        let count, ok = parse_int(fields[1]); if ok && count >= 1 && count <= 32 { for i in count { tick(g); } return lab_net_line_server::Reply { bytes: str("STEPPED\n") }; }
-    }
-    lab_net_line_server::Reply { bytes: str("ERR command\n") }
 }
