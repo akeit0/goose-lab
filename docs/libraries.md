@@ -9,6 +9,7 @@ For choosing a representation, see [useful storage and lifetime patterns](goose-
 
 | Import prefix | Modules under that prefix | Native target / guide |
 | --- | --- | --- |
+| `lab.buffer` | [`indexed`](../lib/lab/buffer/indexed.goose), [`slot_arena`](../lib/lab/buffer/slot_arena.goose) | Pure Goose; [indexed storage](buffer/indexed.md), [variable slot arena](buffer/slot-arena.md) |
 | `lab.collections` | [`byte_buffer`](../lib/lab/collections/byte_buffer.goose), [`tree`](../lib/lab/collections/tree.goose), [`state_bank`](../lib/lab/collections/state_bank.goose) | Pure Goose |
 | `lab.text` | [`utf8`](../lib/lab/text/utf8.goose), [`grapheme`](../lib/lab/text/grapheme.goose), [`line_break`](../lib/lab/text/line_break.goose), [`strings`](../lib/lab/text/strings.goose), [`line_index`](../lib/lab/text/line_index.goose), [`literal_search`](../lib/lab/text/literal_search.goose), [`selection`](../lib/lab/text/selection.goose), [`diff`](../lib/lab/text/diff.goose) | Pure Goose; [text foundation](ui/text-foundation.md) |
 | `lab.json` | [`codec`](../lib/lab/json/codec.goose), [`edit`](../lib/lab/json/edit.goose), [`file`](../lib/lab/json/file.goose) | `file` needs `goose_lab_files`; [JSON](data/json.md) |
@@ -37,6 +38,11 @@ translation unit. `native/goose_lab.h` selects adapters through feature definiti
 provided by the linked targets. See [architecture](architecture.md#native-code).
 
 ## Ownership and execution
+
+[`lab.buffer.slot_arena`](../lib/lab/buffer/slot_arena.goose) stores variable byte
+values in caller-assigned slots with hole reuse and deferred compaction. Its
+caller supplies logical identity/generation; it needs no native target. See the
+[slot arena guide](buffer/slot-arena.md).
 
 [`lab.buffer.indexed`](../lib/lab/buffer/indexed.goose) provides independent
 generation-checked byte buffers in an explicit caller-owned Store, using a chunk

@@ -54,7 +54,8 @@ fn cleanup(root: const u8[:]) {
 }
 fn storage(s: const lab_fs_search_clients::Service&, label: const u8[:]) {
     let stats = lab_io_stream::stats(s.flow); assert(stats.payload_bytes == 0);
-    print("storage,", label, ",", stats.received, ",", stats.queue_bytes, ",", stats.peak_payload_bytes, ",", stats.exported_bytes, ",", stats.shifted_bytes);
+    print("storage,", label, ",", stats.received, ",", stats.queue_bytes, ",", stats.peak_payload_bytes, ",", stats.exported_bytes, ",", stats.shifted_bytes,
+        ",", stats.peak_arena_bytes, ",", stats.reused_bytes, ",", stats.compactions, ",", stats.storage_visits);
 }
 fn codec() {
     var batch = lab_fs_search::Batch { code: -9, done: true, result: -1,

@@ -16,8 +16,9 @@ claims. The linked guides contain bounds, contracts and reproduction commands.
 | --- | --- | --- | --- |
 | Small or short-lived contiguous data | Owned byte array / geometric contiguous run | Chunk traversal and flattening for contiguous consumers | Growth can relocate retained capacity; middle edits and snapshots copy bytes |
 | Independent append/write/truncate buffers with random reads | [Indexed chunks](buffer/indexed.md) in one owner | Relocation of existing payload during library chunk growth; linked-chain traversal on scalar reads | Fixed directories, chunk slack, initialization, owned export copies |
+| Small bounded sets of replaceable variable values | [Slot arena](buffer/slot-arena.md) with hole reuse and deferred compaction | Moving survivors on every removal; large chunk-directory reservations | Retained holes, bounded table scans and occasional compaction |
 | Middle edits with retained Undo/Redo and saved versions | [Persistent piece tree](document/store.md) in a shared owner | Full-text copying for each history entry; unchanged spans/nodes can be shared | New nodes, retained source bytes, collection and prefix-growth moves |
-| Short-lived, sparsely populated result pages | [Compact packets and ready-payload arena](io/streams.md) | Serializing unused fixed-array capacity and reserving a full payload per mailbox | Encode/decode/export copies and shifting later payloads on removal |
+| Short-lived, sparsely populated result pages | [Compact packets and ready-payload arena](io/streams.md) | Serializing unused fixed-array capacity and reserving a full payload per mailbox | Encode/decode/export copies, retained holes and pressure compaction |
 | A few unrelated resizable subsystems | [Separate local owners](goose-feedback.md#composing-document-and-git-pages) plus borrowed references | Combining unrelated storage into one arena | Caller coordinates lifetime and passes each owner explicitly |
 
 These choices compose. HTTP clients use indexed storage for variable result
@@ -37,7 +38,7 @@ reuse or collection while preserving the others.
 Keep indices relative to the owner rather than retaining references into arrays
 that may move. A chunk directory maps byte offsets to chunk slots. Tree children
 and roots are numeric indices; collection remaps them. A compact mailbox records
-a byte offset; removal updates remaining offsets. Each representation has its
+a byte offset; compaction updates remaining offsets. Each representation has its
 own invalidation rule. Numeric indices alone do not make relocation safe.
 
 Borrow slices for synchronous work. Return an owned export when callers must
@@ -137,18 +138,22 @@ result. Search checks its codec against an independent Python byte layout.
 
 The [stream Service](io/streams.md) keeps small mailbox records and one arena
 containing only encoded **ready** payloads. Taking a page exports its bytes and
-removes the range; a held page retains only receipt/status metadata. Removal
-shifts later bytes and repairs their offsets. This simple bounded compaction
-avoids fragmentation but is a poor fit when repeated removal of large ready
-pages makes shifting expensive; measure that before choosing a freelist/chunk
-alternative.
+clears its slot; a held page retains only receipt/status metadata. The original
+arena shifted later bytes on every removal. The current
+[slot arena](buffer/slot-arena.md) reuses holes and compacts only when a put cannot
+fit a hole or remaining tail within its bound. Its 64-varied-page take permutation
+moves zero bytes versus 285768 previously. The cost moves to retained holes,
+bounded descriptor scans and occasional compaction: a pressure case moves two
+65536-byte survivors once to fit a larger replacement. Logical bytes and arena
+length must therefore be measured separately.
 
-On the measured toolchain, fixed search Service storage decreased from 2859463
-to 10047 bytes, excluding the payload tail and caller-owned exports. The
+In the eager-compaction baseline, fixed search Service storage decreased from
+2859463 to 10047 bytes, excluding the payload tail and caller-owned exports. The
 64-client sparse trace transported 481792 queue-image bytes versus a 14269440
 fixed-Page equivalent, a 96.6% reduction. The equivalent uses the same message
 count times the old fixed Page size; it is not a second throughput run.
-Compaction additionally shifted 270410..370544 bytes across repeats. A
+That baseline additionally shifted 270410..370544 bytes across repeats. Current
+slot storage changes deletion/retention work, while retaining the queue codec. A
 maximum-size encoded Batch makes its queue image nine bytes larger than the
 old fixed Page. Compact transport depends on occupancy, not just the type name.
 
@@ -225,7 +230,7 @@ hashes when recording optimization-level qualification. Routine checks use one
 upstream-tracking compatible fork; investigate a specific fork difference with
 a focused probe rather than duplicating every suite.
 
-The reusable indexed buffer, shared document Store, HTTP clients and bounded
+The reusable indexed buffer, slot arena, shared document Store, HTTP clients and bounded
 streams demonstrate these structures with existing Goose. Workbench adoption of
 the multi-document Store and multi-client services is separate from their library
 contracts. Dynamic queue instances, fair multiplexing, smaller fixed history

@@ -116,18 +116,20 @@ fn main() {
 
 The host reserves 64 small client/mailbox descriptors and 64 Flight records,
 even if configured for three clients. A single `u8[>..<]` tail contains only
-ready packets' encoded payloads. Poll appends an adopted payload; take copies
-its bytes to an owned export and removes its range. Held pages retain only
+ready packets' encoded payloads, managed by the [slot arena](../buffer/slot-arena.md).
+Poll adopts into a client slot; take copies
+its bytes directly to an owned export and clears that slot. Held pages retain only
 receipt/status metadata. Discard, cancel, close and terminal replacement also
-remove their payload. Empty terminals do not retain stale arena offsets.
+clear their slot. Empty terminals do not retain stale arena offsets.
 
-Removing a range shifts all later bytes and adjusts the remaining offsets.
-This bounds fragmentation without a separate directory or native allocation,
-but can copy the rest of the arena on each removal. With many large ready pages,
-that work can outweigh the reduced queue images. The contract models 64 varied
-payload lengths, including zero, takes them in a permutation, inserts empty
-terminals between them, and independently checks 285768 shifted bytes. Owned
-exports survive later compaction and shutdown.
+Removal leaves a reusable hole and trims unused tail bytes without moving
+survivors. Adoption searches for a sufficient hole or tail space; only when those
+cannot fit within `clients * 65536` does it compact live payloads. The 64-varied-page
+take permutation now moves zero bytes, versus 285768 in the eager-compaction
+baseline. A three-client pressure contract checks a 131072-byte compaction when
+replacing a smaller consumed page with a maximum-size packet. Owned exports survive
+both paths and shutdown. Gap/compaction scans trade bounded descriptor work and
+retained holes for fewer survivor copies; arena length is distinct from live bytes.
 
 Each packet payload is at most 65536 bytes, enforced at publication. The default
 codec uses Goose `to_bytes([value])` and verified `from_bytes<P[>..]>`, preserving
@@ -145,7 +147,8 @@ in-process format, not a persisted file format or a replacement for search APIs.
 The worker encodes through a const Batch reference. The host's owned `Page<Batch>`
 API still returns the fixed Batch representation, so its exports are not compact.
 
-On the validated Windows x64 toolchain, generated fixed representations are:
+The earlier eager-compaction qualification measured these Windows x64 fixed
+representations; the slot-arena runner measures the current headers separately:
 
 | Value | Bytes |
 | --- | ---: |
@@ -156,9 +159,10 @@ On the validated Windows x64 toolchain, generated fixed representations are:
 | Search Packet header including the runtime tail header | 69 |
 | Queue image prefix, before payload bytes | 61 |
 
-The original fixed-mailbox Service reserved 2859463 bytes. The new owner starts
-with zero retained payload bytes; search ready payloads are bounded by
-`clients * 44540`, and held payloads live in caller-owned exports. Queue images
+The original fixed-mailbox Service reserved 2859463 bytes. The current owner starts
+with zero retained payload bytes; search live ready payloads are bounded by
+`clients * 44540`, its arena including holes by `clients * 65536`, and held payloads
+live in caller-owned exports. Queue images
 are `61 + encoded.len` bytes, versus the old fixed 44592 bytes per search Page.
 A maximum-capacity Batch produces a 44601-byte image, nine bytes larger than the
 old representation; reduction depends on occupancy and actual string lengths.
@@ -194,7 +198,9 @@ workers, plus submitted/completed/received/discarded/replaced/ACK events.
 `completed` includes cancelled/retired jobs, and `discarded` counts unadopted
 received messages. `replaced` records a terminal superseding a ready/held page.
 Byte counters add received queue-image bytes (including stale packets), current/
-peak retained payload, exported encoded bytes and bytes shifted by compaction.
+peak live payload, exported encoded bytes and bytes moved by compaction (the
+existing `shifted_bytes` field). Slot-arena counters add current/peak arena bytes,
+bytes written into retained gaps, compaction calls and gap/compaction descriptor visits.
 They exclude encoder/decoder temporaries, fixed owned exports and allocator/RSS
 measurements. The Python oracle calculates exact 3/16/64 search queue bytes from
 flat-file paths/previews plus message headers, and rejects a corrupted counter.
@@ -234,7 +240,7 @@ python tools/stream_qualification.py --build build-core --output local/stream-ru
 The [qualification runner](../../tools/stream_qualification.py) currently supports
 Windows x64/MSVC Release. It snapshots Goose library/stdlib sources, contract/
 producer/fixture, native sources and built archives, compiler/source hashes,
-link flags and Git state. It rebuilds both contracts at Goose `-O0/-O1/-O2`,
+link flags and Git state. It rebuilds the stream, search and slot-arena contracts at Goose `-O0/-O1/-O2`,
 native C `-O2`, with three repeats per level, checks independent oracles and
 measures generated fixed layouts. A fresh output directory is required;
 failure preserves an incomplete manifest and available logs. One selected

@@ -11,7 +11,7 @@ ownership and asynchronous lifetimes, with measured costs and application limits
 | Area | Guides |
 | --- | --- |
 | Data | [JSON parsing/writing](data/json.md), [JSON files](data/json-files.md), [field editing](data/json-edit.md) |
-| Buffers | [Indexed byte storage](buffer/indexed.md): explicit Stores, independent lifetimes, direct lookup and bounded refusal |
+| Buffers | [Indexed byte storage](buffer/indexed.md): independent lifetimes and direct lookup; [slot arena](buffer/slot-arena.md): variable values, hole reuse and deferred compaction |
 | Documents | [Persistent document Store](document/store.md): multiple explicit-owner documents, shared Undo/saved roots, collection and equal-history comparison |
 | I/O | [Event loop and processes](io/io-core.md), [cancellation](io/cancellation.md), [independent HTTP clients](io/http-clients.md), [bounded streams/search clients](io/streams.md), [process stdin/framing](io/process-input.md) |
 | Files | [Asynchronous reads/listings](io/async-files.md), [atomic saves](io/atomic-save.md), [watching/reconciliation](io/file-watching.md) |

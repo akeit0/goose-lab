@@ -3,6 +3,7 @@ namespace lab_io_stream;
 import std;
 import os;
 import lab.io.cancel;
+import lab.buffer.slot_arena;
 let OK: i32 = 0; let INVALID: i32 = 1; let LIMIT: i32 = 2; let STALE: i32 = 3;
 let BUSY: i32 = 4; let NOT_READY: i32 = 5; let CLOSED: i32 = 6;
 let CANCELLED: i32 = 7; let TIMEOUT: i32 = 8; let FAILED: i32 = 9;
@@ -22,21 +23,22 @@ struct Limits { clients: i64 = 64, inflight: i64 = 64, workers: i64 = 4 }
 struct Flight { ticket: u64 = 0, client: Id = Id {}, serial: u64 = 0, next: u64 = 1, lane: i64 = -1,
     token: lab_io_cancel::Token = lab_io_cancel::Token {} }
 struct Client<P> { generation: u64 = 0, open: bool = false, serial: u64 = 0, ticket: u64 = 0,
-    cancelling: bool = false, ready: bool = false, held: bool = false, receipt: Receipt = Receipt {}, done: bool = false, code: i32 = OK,
-    offset: i64 = 0, bytes: i64 = 0 }
+    cancelling: bool = false, ready: bool = false, held: bool = false, receipt: Receipt = Receipt {}, done: bool = false, code: i32 = OK }
 struct Info { code: i32, serial: u64 = 0, busy: bool = false, ready: bool = false, held: bool = false, cancelling: bool = false }
 struct Stats { clients: i64 = 0, inflight: i64 = 0, ready: i64 = 0, held: i64 = 0, workers: i64 = 0,
     submitted: i64 = 0, completed: i64 = 0, received: i64 = 0, discarded: i64 = 0, replaced: i64 = 0, acknowledgements: i64 = 0,
-    queue_bytes: i64 = 0, payload_bytes: i64 = 0, peak_payload_bytes: i64 = 0, exported_bytes: i64 = 0, shifted_bytes: i64 = 0 }
+    queue_bytes: i64 = 0, payload_bytes: i64 = 0, peak_payload_bytes: i64 = 0, exported_bytes: i64 = 0, shifted_bytes: i64 = 0,
+    arena_bytes: i64 = 0, peak_arena_bytes: i64 = 0, reused_bytes: i64 = 0, compactions: i64 = 0, storage_visits: i64 = 0 }
 struct Service<P> { code: i32 = OK, running: bool = false, limits: Limits = Limits {}, workers: i64[..8] = [],
-    next_ticket: u64 = 0, active: i64 = 0, clients: Client<P>[..64] = [], flights: Flight[64] = [Flight {}; 64], counters: Stats = Stats {}, data: u8[>..<] = [] }
+    next_ticket: u64 = 0, active: i64 = 0, clients: Client<P>[..64] = [], flights: Flight[64] = [Flight {}; 64], counters: Stats = Stats {}, payloads: lab_buffer_slot_arena::Store = lab_buffer_slot_arena::Store {} }
 struct Wait { code: i32, rejected: i64 = 0 }
 fn create<P>(limits: Limits = Limits {}) -> Service<P> {
     if limits.clients < 1 || limits.clients > 64 || limits.inflight < 1 || limits.inflight > 64 || limits.workers < 1 || limits.workers > 8 {
         return Service<P> { code: INVALID };
     }
     let one = [default<P>()]; let bytes = bytes_of(one).len; if bytes + 3 > MAX_PACKET_BYTES { return Service<P> { code: INVALID }; }
-    Service<P> { running: true, limits: limits }
+    Service<P> { running: true, limits: limits, payloads: lab_buffer_slot_arena::create(lab_buffer_slot_arena::Limits {
+        slots: limits.clients, bytes: limits.clients * MAX_PACKET_BYTES, value_bytes: MAX_PACKET_BYTES }) }
 }
 fn valid<P>(s: const Service<P>&, id: Id) -> bool {
     s.running && s.code == OK && id.slot >= 0 && id.slot < s.clients.len && s.clients[id.slot].open && s.clients[id.slot].generation == id.generation
@@ -80,15 +82,10 @@ fn publish_bytes<P>(request: Request, lane: i64, sequence: u64, data: const u8[:
 fn publish<P>(request: Request, lane: i64, sequence: u64, data: P, done: bool = false, code: i32 = OK) {
     let one = [data]; let image = to_bytes(one); publish_bytes<P>(request, lane, sequence, image, done, code);
 }
-// Remove a ready payload and compact the single owned tail. No slices escape.
+// Remove a ready payload without moving survivors. Holes are reused on adoption.
 // Held pages need only their receipt; their exported payload belongs to caller.
 fn erase<P>(s: Service<P>&, slot: i64) {
-    let at = s.clients[slot].offset; let count = s.clients[slot].bytes; if count == 0 { s.clients[slot].offset = 0; return; }
-    let data .= s.data; let shifted = data.len - at - count;
-    for i in shifted { data[at + i] = data[at + count + i]; }
-    data.resize(data.len - count); s.counters.shifted_bytes += shifted;
-    for i in s.clients.len { if s.clients[i].bytes > 0 && s.clients[i].offset > at { s.clients[i].offset -= count; } }
-    s.clients[slot].bytes = 0; s.clients[slot].offset = 0;
+    assert(lab_buffer_slot_arena::clear(s.payloads, slot) == 0);
 }
 fn send_ack<P>(receipt: Receipt) {
     match receipt.lane {
@@ -134,11 +131,11 @@ fn receive<P>(s: Service<P>&, page: const Packet<P>&) {
     if c.cancelling && !page.done { s.counters.discarded++; return; }
     if !page.done && (c.ready || c.held) { s.counters.discarded++; return; }
     if page.done && (c.ready || c.held) { s.counters.replaced++; }
-    let cancelled = c.cancelling && page.done; erase(s, r.client.slot);
+    let cancelled = c.cancelling && page.done;
+    if cancelled { erase(s, r.client.slot); }
+    else { assert(lab_buffer_slot_arena::put(s.payloads, r.client.slot, page.data) == 0); }
     c.receipt = r; c.done = page.done; c.code = if cancelled { CANCELLED } else { page.code }; c.ready = true; c.held = false;
-    c.offset = 0;
-    if !cancelled && page.data.len > 0 { c.offset = s.data.len; c.bytes = page.data.len; let data .= s.data; data.append(page.data); }
-    s.counters.peak_payload_bytes = max(s.counters.peak_payload_bytes, s.data.len);
+    s.counters.peak_payload_bytes = max(s.counters.peak_payload_bytes, lab_buffer_slot_arena::stats(s.payloads).logical);
     if page.done { c.ticket = 0; c.cancelling = false; }
 }
 fn poll<P>(s: Service<P>&, maximum: i64 = 128) -> i64 {
@@ -149,8 +146,8 @@ fn take_packet<P>(s: Service<P>&, id: Id) -> Packet<P>, i32 {
     if !valid(s, id) { return Packet<P> { receipt: Receipt {} }, STALE; }
     let c .= s.clients[id.slot]; if !c.ready { return Packet<P> { receipt: Receipt {} }, NOT_READY; }
     var result = Packet<P> { c.receipt, c.done, c.code };
-    if c.bytes > 0 { result.data.append(s.data[c.offset..c.offset + c.bytes]); }
-    s.counters.exported_bytes += c.bytes; erase(s, id.slot); c.ready = false; c.held = !c.done; return result, OK;
+    assert(lab_buffer_slot_arena::append_to(s.payloads, id.slot, result.data) == 0);
+    s.counters.exported_bytes += result.data.len; erase(s, id.slot); c.ready = false; c.held = !c.done; return result, OK;
 }
 // Default fixed-P codec; compact domain adapters use take_packet and decode.
 fn take<P>(s: Service<P>&, id: Id) -> Page<P>, i32 {
@@ -188,7 +185,10 @@ fn close<P>(s: Service<P>&, id: Id) -> i32 {
     erase(s, id.slot); s.clients[id.slot].open = false; s.clients[id.slot].ticket = 0; s.clients[id.slot].ready = false; s.clients[id.slot].held = false; OK
 }
 fn stats<P>(s: const Service<P>&) -> Stats {
-    var out = s.counters; out.inflight = s.active; out.workers = s.workers.len; out.payload_bytes = s.data.len;
+    var out = s.counters; out.inflight = s.active; out.workers = s.workers.len;
+    let storage = lab_buffer_slot_arena::stats(s.payloads); out.payload_bytes = storage.logical; out.shifted_bytes = storage.moved;
+    out.arena_bytes = storage.arena; out.peak_arena_bytes = storage.high_water; out.reused_bytes = storage.reused;
+    out.compactions = storage.compactions; out.storage_visits = storage.visits;
     for c in s.clients { if c.open { out.clients++; if c.ready { out.ready++; } if c.held { out.held++; } } } out
 }
 fn prepare_shutdown<P>(s: Service<P>&) {
@@ -201,7 +201,7 @@ fn prepare_shutdown<P>(s: Service<P>&) {
 fn finish_shutdown<P>(s: Service<P>&) {
     if !s.running { return; }
     for worker in s.workers { thread_wait(worker); }
-    loop { if poll(s) == 0 { break; } } assert(s.active == 0 && s.data.len == 0);
+    loop { if poll(s) == 0 { break; } } assert(s.active == 0 && lab_buffer_slot_arena::stats(s.payloads).arena == 0);
     drain_lane<P, Lane0>(); drain_lane<P, Lane1>(); drain_lane<P, Lane2>(); drain_lane<P, Lane3>();
     drain_lane<P, Lane4>(); drain_lane<P, Lane5>(); drain_lane<P, Lane6>(); drain_lane<P, Lane7>();
     s.workers.resize(0); s.running = false;

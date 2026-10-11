@@ -9,11 +9,14 @@ import tempfile
 
 def validate_producer(stdout):
     traces = {(count, client): [] for count in (3, 16, 64) for client in range(count)}
-    summaries = []; storage = None
+    summaries = []; storage = None; fragmented = None
     for row in csv.reader(stdout.splitlines()):
         if row[0] == "compact-storage":
             if storage is not None: raise AssertionError("Duplicate storage trace")
             storage = tuple(map(int, row[1:])); continue
+        if row[0] == "fragmented-storage":
+            if fragmented is not None: raise AssertionError("Duplicate fragmented trace")
+            fragmented = tuple(map(int, row[1:])); continue
         if row[0] != "page":
             summaries.append(",".join(row)); continue
         if len(row) != 6:
@@ -28,17 +31,15 @@ def validate_producer(stdout):
     if any(values != [1, 2, 3, 4] for values in traces.values()):
         raise AssertionError("Incomplete producer stream")
     if summaries != ["stream races and typed ACK isolation passed", "many,3,passed", "many,16,passed", "many,64,passed",
-                     "stream stalled-lane bounds and shutdown passed", "compact stream storage and owned exports passed", "Stream contracts passed"]:
+                     "stream stalled-lane bounds and shutdown passed", "compact stream storage and owned exports passed",
+                     "fragmented stream storage and pressure compaction passed", "Stream contracts passed"]:
         raise AssertionError("Incomplete lifecycle/bounds coverage")
-    lengths = [i * 7 for i in range(64)]; live = list(range(64)); shifted = 0
-    for index in [63] + [(n * 17) % 63 for n in range(63)]:
-        at = live.index(index)
-        if lengths[index]: shifted += sum(lengths[i] for i in live[at + 1:])
-        live.remove(index)
-    total = sum(lengths); expected_storage = (total, total + 128 * 61, total, shifted)
+    total = sum(i * 7 for i in range(64)); expected_storage = (total, total + 128 * 61, total, 0)
     if storage != expected_storage: raise AssertionError(f"Compact storage mismatch: {storage} expected {expected_storage}")
+    if fragmented != (3 * 65536, 3 * 65536, 2 * 65536, 1): raise AssertionError("Pressure compaction mismatch")
     return {"clients": 83, "pages": sum(map(len, traces.values())), "ack_cancel_races": 100,
-            "compact_storage": dict(zip(("peak_payload_bytes", "queue_bytes", "exported_bytes", "shifted_bytes"), storage))}
+            "compact_storage": dict(zip(("peak_payload_bytes", "queue_bytes", "exported_bytes", "shifted_bytes"), storage)),
+            "fragmented_storage": dict(zip(("peak_payload_bytes", "peak_arena_bytes", "shifted_bytes", "compactions"), fragmented))}
 
 
 def files(root):
@@ -102,8 +103,9 @@ def validate_search(stdout, expected):
             label = row[1]
             if label in transport: raise AssertionError("Duplicate search storage trace")
             values = tuple(map(int, row[2:]))
-            if len(values) != 5: raise AssertionError("Malformed search storage trace")
-            transport[label] = dict(zip(("messages", "queue_bytes", "peak_payload_bytes", "exported_bytes", "shifted_bytes"), values)); continue
+            if len(values) != 9: raise AssertionError("Malformed search storage trace")
+            transport[label] = dict(zip(("messages", "queue_bytes", "peak_payload_bytes", "exported_bytes", "shifted_bytes",
+                                       "peak_arena_bytes", "reused_bytes", "compactions", "storage_visits"), values)); continue
         if row[0] not in ("hit", "issue", "done"):
             summaries.append(",".join(row)); continue
         kind, label, *values = row
@@ -147,6 +149,10 @@ def validate_search(stdout, expected):
             raise AssertionError("Queue/retained payload bounds failed")
         if not 0 <= counters["exported_bytes"] <= size or counters["shifted_bytes"] < 0:
             raise AssertionError("Invalid copy counters")
+        if not counters["peak_payload_bytes"] <= counters["peak_arena_bytes"] <= count * 65536:
+            raise AssertionError("Invalid retained arena bound")
+        if not 0 <= counters["reused_bytes"] <= size or counters["compactions"] < 0 or counters["storage_visits"] < 0:
+            raise AssertionError("Invalid reuse/addressing counters")
         counters["fixed_page_equivalent_bytes"] = messages * 44592
         if label != "lifetimes":
             encoded_content = 0
