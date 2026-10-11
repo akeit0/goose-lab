@@ -1,6 +1,27 @@
 import std;
 import .world;
+fn retirement_boundary() {
+    var w = experiment_ecs::create(3); w.entities[0].generation = 0xFFFFFFFFFFFFFFFE;
+    let last, code = experiment_ecs::spawn(w, 0, 0, 1, 0, true, 1, 5, 1);
+    assert(code == 0 && last.slot == 0 && last.generation == 0xFFFFFFFFFFFFFFFF);
+    assert(experiment_ecs::despawn(w, last) == 0);
+    let first, a = experiment_ecs::spawn(w, 1, 2, 0, 0, false, 2, 10, 2);
+    let second, b = experiment_ecs::spawn(w, 2, 3, 1, 0, true, 3, 20, 2);
+    assert(a == 0 && b == 0 && first.slot == 1 && second.slot == 2);
+    let image = to_bytes([w]);
+    let full, limit = experiment_ecs::spawn(w, 0, 0, 0, 0, false, 1, 5, 1);
+    let bad, invalid = experiment_ecs::spawn(w, -9223372036854775807 - 1, 0, 0, 0, false, 1, 5, 1);
+    let velocity = experiment_ecs::set_velocity(w, first, true, -9223372036854775807 - 1, 0);
+    let stale = experiment_ecs::despawn(w, last);
+    assert(full.slot == -1 && bad.slot == -1 && to_bytes([w]) == image);
+    assert(limit == experiment_ecs::LIMIT && invalid == experiment_ecs::INVALID && velocity == experiment_ecs::INVALID && stale == experiment_ecs::STALE);
+    experiment_ecs::check(w);
+    print("retired,", w.entities[0].generation, ",", limit, ",", invalid, ",", velocity, ",", stale, ",", w.spawns, ",", w.destroyed);
+    print("boundary,", experiment_ecs::describe(w, first)); print("boundary,", experiment_ecs::describe(w, second));
+    assert(experiment_ecs::despawn(w, first) == 0 && experiment_ecs::despawn(w, second) == 0); experiment_ecs::check(w);
+}
 fn main() {
+    retirement_boundary();
     for capacity in [3, 16, 64] {
         for initial in [238147, 4294967294] {
             var w = experiment_ecs::create(capacity); var seed: u64 = initial as u64;

@@ -14,8 +14,15 @@ from ecs_game_fixture import World
 
 
 class Client:
-    def __init__(self, port):
-        self.socket = socket.create_connection(("127.0.0.1", port), timeout=5)
+    def __init__(self, port, receive_buffer=None):
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            if receive_buffer is not None:
+                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, receive_buffer)
+            self.socket.settimeout(5)
+            self.socket.connect(("127.0.0.1", port))
+        except BaseException:
+            self.socket.close(); raise
         self.socket.settimeout(8)
         self.buffer = bytearray()
 
@@ -78,19 +85,26 @@ def response(world, line):
     return b"ERR command\n"
 
 
-def validate(stdout):
+def accounting(stdout):
     summaries = [line for line in stdout.splitlines() if line.startswith("SERVER ")]
     assert len(summaries) == 1, "Missing final server accounting"
     values = list(map(int, summaries[0].split()[1:]))
-    assert len(values) == 9
-    accepted, closed, requests, paused, partial, written, input_peak, output_peak, live = values
+    assert len(values) == 12
+    assert all(value >= 0 for value in values)
+    return dict(zip(("accepted", "closed", "requests", "paused_polls", "partial_writes", "written_bytes", "input_peak", "output_peak", "live_sockets", "blocked_writes", "compactions", "reclaimed_bytes"), values))
+
+
+def validate(stdout):
+    metrics = accounting(stdout)
+    accepted, closed, requests, paused, partial, written, input_peak, output_peak, live, blocked, compactions, reclaimed = metrics.values()
     assert accepted == closed == 7 and live == 0
     assert requests > 80 and paused > 0 and partial > 0 and written > 4000
     assert input_peak == 256 and 1024 < output_peak <= 2048
-    return dict(zip(("accepted", "closed", "requests", "paused_polls", "partial_writes", "written_bytes", "input_peak", "output_peak", "live_sockets"), values))
+    assert compactions > 0 and reclaimed >= compactions
+    return metrics
 
 
-def run(binary):
+def run_protocol(binary):
     process = subprocess.Popen([str(binary), "32"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8")
     lines, events, peers = [], queue.Queue(), []
 
@@ -180,7 +194,9 @@ def run(binary):
         stdout = "".join(lines); metrics = validate(stdout)
         assert metrics["requests"] == requests and metrics["written_bytes"] >= received_bytes
         metrics.update(checked_replies=checked, model_entities_checked=len(world.entities), game_score=world.score)
-        for damaged in (stdout.replace("SERVER 7 7", "SERVER 7 6", 1), stdout.replace(" 0\n", " 1\n"), "\n".join(stdout.splitlines()[:-1])):
+        summary = next(line for line in stdout.splitlines() if line.startswith("SERVER "))
+        leaked = summary.split(); leaked[9] = "1"
+        for damaged in (stdout.replace("SERVER 7 7", "SERVER 7 6", 1), stdout.replace(summary, " ".join(leaked)), "\n".join(stdout.splitlines()[:-1])):
             try: validate(damaged)
             except (AssertionError, ValueError): pass
             else: raise AssertionError("Server accounting oracle accepted a damaged trace")
@@ -192,6 +208,68 @@ def run(binary):
         if process.poll() is None: process.kill(); process.wait(timeout=5)
         reader.join(timeout=2)
         process.stdout.close(); process.stderr.close()
+
+
+def run_pressure(binary):
+    """Wait for an actual native would-block before resuming the unread peer."""
+    process = subprocess.Popen([str(binary), "2048"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8")
+    lines, events, peers = [], queue.Queue(), []
+
+    def read_stdout():
+        for line in process.stdout:
+            lines.append(line); events.put(line)
+        events.put(None)
+
+    reader = threading.Thread(target=read_stdout, daemon=True); reader.start()
+    received_bytes = checked = 0
+
+    def expect(peer, wanted):
+        nonlocal received_bytes, checked
+        actual = peer.line()
+        assert actual == wanted, f"Pressure reply {actual!r} expected {wanted!r}"
+        received_bytes += len(actual); checked += 1
+
+    try:
+        first = events.get(timeout=10)
+        assert first and first.startswith("LISTEN "), f"Pressure server failed: {first}"
+        port = int(first.split()[1])
+        a = Client(port, receive_buffer=4096); peers.append(a); expect(a, b"HELLO 0 1\n")
+        b = Client(port); peers.append(b); expect(b, b"HELLO 1 1\n")
+        sizes = [960 + i % 65 for i in range(512)]
+        a.send(b"".join(f"BURST {size}\n".encode() for size in sizes))
+        blocked = events.get(timeout=8)
+        assert blocked == "BLOCKED 0 1\n", f"No native would-block on unread peer: {blocked!r}"
+        # All a's responses remain unread here. b must parse and mutate the World.
+        world = World(16)
+        for command in (b"PING\n", b"SPAWN 3 4 1 -1 2 20 2\n", b"STATE 0 1\n"):
+            b.send(command); expect(b, response(world, command))
+        for size in sizes:
+            expect(a, b"DATA " + b"x" * size + b"\n")
+        b.send(b"SHUTDOWN\n"); expect(b, b"BYE\n"); b.eof(); a.eof()
+        process.wait(timeout=10); reader.join(timeout=2)
+        stderr = process.stderr.read(); stdout = "".join(lines)
+        assert process.returncode == 0, stderr + stdout
+        metrics = accounting(stdout)
+        assert metrics["accepted"] == metrics["closed"] == 2 and metrics["live_sockets"] == 0
+        assert metrics["requests"] == len(sizes) + 4 and metrics["written_bytes"] == received_bytes
+        assert metrics["blocked_writes"] > 0 and metrics["paused_polls"] > 0
+        assert metrics["input_peak"] <= 256 and 1024 < metrics["output_peak"] <= 2048
+        metrics.update(checked_replies=checked, payload_responses=len(sizes))
+        print(f"Kernel pressure: {metrics}")
+        return subprocess.CompletedProcess([str(binary), "2048"], process.returncode, stdout, stderr), metrics
+    finally:
+        for peer in peers: peer.close()
+        if process.poll() is None: process.kill(); process.wait(timeout=5)
+        reader.join(timeout=2); process.stdout.close(); process.stderr.close()
+
+
+def run(binary):
+    protocol, metrics = run_protocol(binary)
+    pressure, pressure_metrics = run_pressure(binary)
+    metrics["kernel_pressure"] = pressure_metrics
+    # Keep both transcripts; distinguish the second accounting record.
+    combined = subprocess.CompletedProcess(protocol.args, 0, protocol.stdout + pressure.stdout.replace("SERVER ", "PRESSURE "), protocol.stderr + pressure.stderr)
+    return combined, metrics
 
 
 if __name__ == "__main__":

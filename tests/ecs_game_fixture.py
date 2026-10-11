@@ -13,7 +13,7 @@ class World:
     def spawn(self, x, y, vx, vy, moving, hp, ttl, team):
         if not (abs(x) <= 32 and abs(y) <= 32 and -8 <= vx <= 8 and -8 <= vy <= 8 and 1 <= hp <= 99 and 1 <= ttl <= 128 and team in (1, 2)):
             return (-1, 0), 1
-        slot = next((s for s in range(self.capacity) if s not in self.entities), None)
+        slot = next((s for s in range(self.capacity) if s not in self.entities and self.generations[s] < (1 << 64) - 1), None)
         if slot is None:
             return (-1, 0), 2
         self.generations[slot] += 1
@@ -73,7 +73,17 @@ class World:
 
 
 def expected():
-    rows = []
+    w = World(3); w.generations[0] = (1 << 64) - 2
+    last, code = w.spawn(0, 0, 1, 0, True, 1, 5, 1)
+    assert code == 0 and last == (0, (1 << 64) - 1)
+    w.despawn(last)
+    first, _ = w.spawn(1, 2, 0, 0, False, 2, 10, 2)
+    second, _ = w.spawn(2, 3, 1, 0, True, 3, 20, 2)
+    _, limit = w.spawn(0, 0, 0, 0, False, 1, 5, 1)
+    _, invalid = w.spawn(-(1 << 63), 0, 0, 0, False, 1, 5, 1)
+    velocity = w.velocity(first, True, -(1 << 63), 0); stale = w.despawn(last)
+    rows = [f"retired,{w.generations[0]},{limit},{invalid},{velocity},{stale},{w.spawns},{w.destroyed}",
+            "boundary," + w.describe(first), "boundary," + w.describe(second)]
     for capacity in (3, 16, 64):
         for initial in (238147, 4294967294):
             w = World(capacity); seed = initial

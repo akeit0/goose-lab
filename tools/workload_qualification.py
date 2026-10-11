@@ -61,7 +61,7 @@ def main():
     fixtures = {n: load(TARGETS[n][2], sources / f"fixtures/{TARGETS[n][2]}.py") for n in names}
     record = {"complete": False, "lab": revision(ROOT), "toolchain": revision(checkout), "compiler_sha256": digest(compiler),
               "native_compiler": cc.desc, "native_optimization": 2, "repeats": args.repeats,
-              "source_sha256": {str(p.relative_to(sources)): digest(p) for p in sources.rglob("*") if p.is_file()},
+              "source_sha256": {str(p.relative_to(sources)): digest(p) for p in sources.rglob("*") if p.is_file() and "__pycache__" not in p.parts},
               "runs": [], "layout": {}, "limits": "Bounded correctness workloads; not throughput, rendering, production-server or RSS qualification."}
 
     def save(): (output / "results.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")

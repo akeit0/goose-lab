@@ -255,7 +255,11 @@ inputs. The [regex experiment](experiments/regex-ecs-server.md#regex-reuse-the-u
 compiles once per batch, borrows capture slots during callbacks and copies bytes
 only when retaining an export. The same compiled plan parses commands for a
 bounded TCP server whose connection buffers and game World remain separate.
-No plan or native socket becomes a hidden per-entity owning object.
+No plan or native socket becomes a hidden per-entity owning object. The server
+retains only the unsent response suffix when output capacity is needed again.
+It checks another connection's progress while a real kernel write is blocked,
+then verifies every response byte after reads resume; finite buffer limits alone
+do not establish that behavior.
 
 Dense component storage also separates identity from placement. The
 [ECS game](experiments/regex-ecs-server.md#ecs-dense-components-stable-logical-ids)

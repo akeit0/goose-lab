@@ -15,7 +15,18 @@ struct Connection {
     socket: u64 = 0, generation: u64 = 0, eof: bool = false, closing: bool = false,
     input: u8[..256] = [], output: u8[..2048] = [], sent: i64 = 0,
 }
-struct Counters { accepted: i64 = 0, closed: i64 = 0, requests: i64 = 0, paused: i64 = 0, partial: i64 = 0, written: i64 = 0, input_peak: i64 = 0, output_peak: i64 = 0 }
+struct Counters { accepted: i64 = 0, closed: i64 = 0, requests: i64 = 0, paused: i64 = 0, partial: i64 = 0, written: i64 = 0, input_peak: i64 = 0, output_peak: i64 = 0,
+    blocked: i64 = 0, compactions: i64 = 0, reclaimed: i64 = 0 }
+fn reserve_response(c: Connection&, counters: Counters&) -> bool {
+    // Reclaim sent bytes only when the next response needs their capacity.
+    // A kernel-blocked write keeps the owned unsent suffix intact across polls.
+    if c.output.len > 948 && c.sent > 0 {
+        let remaining = c.output.len - c.sent;
+        for i in remaining { c.output[i] = c.output[c.sent + i]; }
+        c.output.resize(remaining); counters.reclaimed += c.sent; c.sent = 0; counters.compactions++;
+    }
+    c.output.len <= 948
+}
 fn route(w: experiment_ecs::World&, re: regex::Regex&, line: const u8[:]) -> u8[>..], bool {
     let start, end = regex::find(re, line);
     if start != 0 || end != line.len { return str("ERR syntax\n"), false; }
@@ -64,7 +75,7 @@ fn close_connection(c: Connection&, counters: Counters&) {
 }
 fn main() {
     let argv = args(); var quantum: i64 = 32;
-    if argv.len == 2 { let value, ok = parse_int(argv[1]); assert(ok && value >= 1 && value <= 64); quantum = value; } else { assert(argv.len == 1); }
+    if argv.len == 2 { let value, ok = parse_int(argv[1]); assert(ok && value >= 1 && value <= 2048); quantum = value; } else { assert(argv.len == 1); }
     assert(transport_init()); var port: i64 = 0; var listener = listen_raw(port); assert(listener != 0);
     let command = regex::compile("([A-Z]+)(?: (-?[0-9]{1,19}))?(?: (-?[0-9]{1,19}))?(?: (-?[0-9]{1,19}))?(?: (-?[0-9]{1,19}))?(?: (-?[0-9]{1,19}))?(?: (-?[0-9]{1,19}))?(?: (-?[0-9]{1,19}))?");
     var world = experiment_ecs::create(16); var clients: Connection[3] = [Connection {}; 3]; var counters = Counters {};
@@ -87,7 +98,7 @@ fn main() {
             let c .= clients[slot]; if c.socket == 0 { continue; } active++;
             if !c.closing {
                 // Reserve room for the largest response before consuming a frame.
-                if c.output.len > 948 { counters.paused++; }
+                if !reserve_response(c, counters) { counters.paused++; }
                 else {
                     if !c.eof && c.input.len < 256 {
                         var scratch: u8[16] = [0; 16]; let n = receive_raw(c.socket, scratch[0], min(16, 256 - c.input.len));
@@ -119,6 +130,10 @@ fn main() {
             if c.sent < c.output.len {
                 let remaining = c.output.len - c.sent; let n = send_raw(c.socket, c.output[c.sent], min(remaining, quantum));
                 if n == -2 { close_connection(c, counters); continue; }
+                if n == -1 {
+                    if counters.blocked == 0 { print("BLOCKED ", slot, " ", c.generation); flush_stdout(); }
+                    counters.blocked++;
+                }
                 if n > 0 { if n < remaining { counters.partial++; } c.sent += n; counters.written += n; }
             }
             if c.sent == c.output.len { c.output.resize(0); c.sent = 0; if c.closing { close_connection(c, counters); } }
@@ -129,5 +144,5 @@ fn main() {
     for slot in world.capacity { if world.entities[slot].alive { assert(experiment_ecs::despawn(world, experiment_ecs::Id { slot, world.entities[slot].generation }) == 0); } }
     experiment_ecs::check(world); assert(world.position.slots.len == 0 && shutdown_raw());
     print("SERVER ", counters.accepted, " ", counters.closed, " ", counters.requests, " ", counters.paused, " ", counters.partial, " ", counters.written,
-        " ", counters.input_peak, " ", counters.output_peak, " ", live_raw());
+        " ", counters.input_peak, " ", counters.output_peak, " ", live_raw(), " ", counters.blocked, " ", counters.compactions, " ", counters.reclaimed);
 }

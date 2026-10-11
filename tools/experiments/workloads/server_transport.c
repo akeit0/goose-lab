@@ -52,8 +52,11 @@ uint64_t exp_server_listen(int64_t *port) {
 uint64_t exp_server_accept(uint64_t listener, int32_t *code) {
     exp_socket s = accept(decoded(listener), 0, 0);
     if (s == BAD_SOCKET) { *code = would_block() ? 1 : 2; return 0; }
-    int on = 1;
-    if (!nonblocking(s) || setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (const char *)&on, sizeof(on))) { close_socket(s); *code = 2; return 0; }
+    /* A small requested send buffer makes real kernel backpressure observable
+       in the bounded lab workload; the OS may round the actual capacity. */
+    int on = 1, send_buffer = 4096;
+    if (!nonblocking(s) || setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (const char *)&on, sizeof(on)) ||
+        setsockopt(s, SOL_SOCKET, SO_SNDBUF, (const char *)&send_buffer, sizeof(send_buffer))) { close_socket(s); *code = 2; return 0; }
     *code = 0; live_sockets++; return encoded(s);
 }
 int64_t exp_server_receive(uint64_t socket_id, uint8_t *out, int64_t capacity) {

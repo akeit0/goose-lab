@@ -73,6 +73,12 @@ after each of 2400 seeded frames at 3/16/64 capacity, along with score and work
 counters. Full capacity, non-LIFO reuse, component removal and final empty
 component stores are also checked.
 
+A boundary case starts one slot at generation `u64::MAX - 1`, uses the last
+generation, then retires it. Reopening skips that slot and capacity refusal
+preserves the whole World even though the retired slot is inactive. Minimum
+`i64` coordinates/velocity and the old maximum-generation ID are also refused
+without changing the remaining entities.
+
 ## Server: bounded progress per connection
 
 [`server.goose`](../../tools/experiments/workloads/server.goose) owns one World,
@@ -80,6 +86,11 @@ one compiled command Regex and three connection records. Each record has a
 generation, 256-byte input buffer, 2048-byte output buffer and sent offset.
 It processes at most one complete frame per connection per polling pass and
 reserves room for the largest response before reading/consuming more input.
+When sent bytes occupy needed capacity, it compacts only the unsent suffix and
+resets the sent offset. This avoids waiting for the entire old buffer to drain;
+it does copy at most 2048 bytes per compaction. Would-block leaves that owned
+suffix intact for a later pass. Counters distinguish partial writes, native
+would-block, admission pauses and reclaimed prefix bytes.
 A blocked connection therefore does not prevent another connection's PING.
 Responses stay in FIFO order on each connection; actions across connections
 are serialized by the owner's polling order.
@@ -90,6 +101,8 @@ send/close/shutdown. Would-block and partial progress return to Goose. It contai
 no game state, request parser, framing buffer or response queue. A fourth peer
 waits in the OS listen backlog until a Goose connection slot becomes available;
 this does not promise an exact OS backlog capacity.
+Accepted sockets request a 4096-byte send buffer to make native backpressure
+observable within the bounded experiment; the OS can adjust its actual size.
 
 Commands are ASCII lines ending in LF, optionally CRLF:
 
@@ -120,9 +133,19 @@ full entity capacity, stale entity IDs and connection generation changes, half-c
 connection reset and shutdown with another peer holding an incomplete command.
 The same independent dictionary World checks replies and entity states. A large
 pipeline remains unread while another peer progresses. Send calls are deliberately
-limited to 32 bytes to exercise partial-send bookkeeping; the test establishes
-host-buffer backpressure, not saturation of the kernel send buffer. Native
-socket accounting must return to zero. These are TCP experiments, not HTTP/TLS
+limited to 32 bytes in the protocol pass to exercise partial-send bookkeeping
+and reclaim sent prefixes while preserving response bytes/order.
+
+A second process allows 2048-byte sends and sends 512 variable-size BURST requests
+to a peer with a requested 4096-byte receive buffer. The fixture leaves responses
+unread until Goose reports an actual native would-block. While that peer remains
+unread, another peer must complete PING, SPAWN and STATE. Resuming reads must
+deliver all 512 responses in order with the exact expected bytes, then shutdown
+must release both sockets. Total bytes written must equal received bytes.
+This observes kernel backpressure rather than inferring it from elapsed time
+or artificial write limits. Buffer sizes, blocked poll counts and timings remain
+OS-dependent; this has been validated on Windows/MSVC. Native
+socket accounting must return to zero in both processes. These are TCP experiments, not HTTP/TLS
 or production-server validation.
 
 ## Build and recorded qualification
@@ -141,7 +164,7 @@ compiler at Goose O0/O1/O2, with native C O2. Existing output directories are
 refused; incomplete records survive failure. `--targets`, `--levels` and
 `--repeats` allow focused runs without duplicating every experiment.
 
-The Windows/MSVC qualification on 2026-10-11 passed all nine target/level runs:
+The initial Windows/MSVC qualification on 2026-10-11 passed all nine target/level runs:
 
 | Per run | Independently checked work |
 | --- | --- |
@@ -159,3 +182,15 @@ runtime/OS allocations. They do not establish total process memory or throughput
 The compiler checkout was `71e848d732362a47ee7fe000a3e1601d0196259a`, clean;
 the snapshot records the new working-tree sources. Raw records remain under
 ignored `local/references/workloads/development-run/`.
+
+The follow-up `backpressure-run/` qualifies the changed ECS/server targets at
+O0/O1/O2 without repeating the unchanged regex workload. All six target/level
+runs passed. Each ECS run adds the generation-retirement and integer-minimum
+boundary cases. Each server run now checks two processes: 9 connection lifetimes,
+619 requests and 630 replies, including 512 responses after actual kernel
+backpressure. Across three levels, this is 27 connection lifetimes and 1857
+requests; every process returns to zero native sockets. The protocol pass
+reclaimed 3200 sent bytes in 100 compactions, with a 1976-byte peak output buffer.
+These counters establish exercised behavior, not a throughput improvement.
+Fixed World/Connection layouts remain 7298/2334 bytes. The record excludes
+Python bytecode caches from source hashes.
