@@ -81,6 +81,12 @@ defaults live in `cmake/Fonts.cmake`.
 
 ## Applications
 
+`lab.ecs` supplies generic identity and component storage; `lab.net.line_server`
+supplies framing, connection progress and bounded shutdown. The arena's component
+schema, collision rules, waves, score, command protocol and presentation live in
+`samples/arena`. Experiments reuse that sample World through the samples module
+root. Neither the libraries nor the native socket adapter depend on game code.
+
 Each directory under `samples` owns its application's entry point and models.
 The workbench groups its editor, workspace and Git pages under `samples/workbench`.
 Imports such as `workbench.editor.workspace` use namespace `app_editor_workspace`.

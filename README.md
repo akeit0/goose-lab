@@ -19,6 +19,8 @@ patterns fit Goose and how they relate to C++, Rust, Go and Zig.
 Opt-in [regex, ECS game and TCP server workloads](docs/experiments/regex-ecs-server.md)
 extend those experiments to compiled matching plans, dense components and
 actual network request handling.
+The [local arena](docs/apps/arena.md) uses reusable ECS and line-transport libraries
+with an authoritative server, CLI clients and an optional graphical client.
 
 ## What's here
 
@@ -30,7 +32,7 @@ actual network request handling.
 | Git/search | Status, diffs, history, batch object reads, file search, lazy file trees | [Git viewer](docs/apps/git-viewer.md) |
 | UI | Clay layout, GPU scene, shaped text, color emoji, fields, IME, virtual lists, modals | [UI composition](docs/ui/ui-composition.md) |
 
-Reusable Goose code is grouped under `lib/lab`: `buffer`, `text`, `collections`, `json`,
+Reusable Goose code is grouped under `lib/lab`: `buffer`, `text`, `collections`, `ecs`, `json`,
 `io`, `fs`, `net`, `git`, `document` and `ui`. UI has separate layout, input,
 render, controls, views and overlays. Import paths mirror files:
 `import lab.net.http;` uses namespace `lab_net_http`.
@@ -39,7 +41,7 @@ The Workbench sample combines a compact sidebar, file tabs, an editor, project
 search and read-only Git diffs/history. Help includes platform-aware shortcuts.
 
 Application entry points, models and controllers are grouped under
-`samples/workbench`, `api_browser`, `task_inbox` and `component_gallery`.
+`samples/workbench`, `api_browser`, `task_inbox`, `component_gallery` and `arena`.
 Small commands live under `samples/cli`; see the [sample guide](samples/README.md). Native services are grouped under `native/io`, `fs`,
 `net` and `ui`; generated C uses `native/goose_lab.h`.
 See [the module map](docs/libraries.md) and [architecture](docs/architecture.md).

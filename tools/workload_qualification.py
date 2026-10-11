@@ -50,6 +50,9 @@ def main():
     if cc.style != "msvc": parser.error("This runner currently supports MSVC")
     output.mkdir(parents=True); sources = output / "sources"
     shutil.copytree(ROOT / "tools/experiments/workloads", sources / "workloads")
+    shutil.copytree(ROOT / "lib", sources / "lib")
+    shutil.copytree(ROOT / "samples/arena", sources / "samples/arena")
+    shutil.copytree(ROOT / "native/net/tcp", sources / "native/net/tcp")
     shutil.copytree(checkout / "stdlib", sources / "stdlib")
     (sources / "fixtures").mkdir()
     for _, _, fixture in TARGETS.values():
@@ -70,12 +73,13 @@ def main():
     try:
         for name in names:
             target, source, _ = TARGETS[name]
-            native = [sources / "workloads/server_transport.c"] if name == "server" else []
+            native = [sources / "native/net/tcp/tcp.c"] if name == "server" else []
             libs = ["ws2_32.lib"] if name == "server" else []
-            extra = ["/utf-8", "/MT", "/F67108864"]
+            extra = ["/utf-8", "/MT", "/F67108864", f"/I{sources / 'native'}"]
             for level in sorted(set(args.levels)):
                 generated = output / f"{name}-O{level}.c"; binary = generated.with_suffix(".exe")
-                command = [str(compiler), f"-O{level}", "--stdlib", str(sources / "stdlib"), "--standalone", "-o", str(generated), str(sources / "workloads" / source)]
+                command = [str(compiler), f"-O{level}", "--stdlib", str(sources / "stdlib"), "--module-dir", str(sources / "lib"),
+                           "--module-dir", str(sources / "samples"), "--standalone", "-o", str(generated), str(sources / "workloads" / source)]
                 result = subprocess.run(command, capture_output=True, text=True, timeout=90)
                 (output / f"{name}-generate-O{level}.log").write_text(result.stdout + result.stderr, encoding="utf-8")
                 result.check_returncode()
@@ -92,8 +96,8 @@ def main():
                     save(); print(f"{name} O{level} repeat {repeat+1}: passed", flush=True)
                 if level == min(args.levels) and name in ("ecs", "server"):
                     body = generated.read_text(encoding="utf-8")
-                    world = re.search(r"typedef struct (experiment_ecs_World_\w+)\b", body)[1]
-                    connection = re.search(r"typedef struct (Connection_\w+)\b", body)[1] if name == "server" else None
+                    world = re.search(r"typedef struct (app_arena_world_World_\w+)\b", body)[1]
+                    connection = re.search(r"typedef struct (lab_net_line_server_Connection_\w+)\b", body)[1] if name == "server" else None
                     expression = f'printf("%zu\\n", sizeof({world}));'
                     if connection: expression += f' printf("%zu\\n", sizeof({connection}));'
                     probe = output / f"{name}-layout.c"; probe_binary = probe.with_suffix(".exe")

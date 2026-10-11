@@ -1,8 +1,10 @@
 # Regex, ECS game and TCP server experiments
 
-Three opt-in targets exercise Goose outside document editing. They live under
-[`tools/experiments/workloads`](../../tools/experiments/workloads); their models
-and transport are experiment sources with no new public library or compiler API.
+Three opt-in targets exercise Goose outside document editing. Their entry points
+live under [`tools/experiments/workloads`](../../tools/experiments/workloads).
+The game World now lives in the [arena sample](../apps/arena.md), while generic
+[ECS identity/storage](../ecs.md) and [TCP line transport](../io/line-server.md)
+are reusable libraries. Game schema, rules and command protocols stay outside lib.
 
 | Target | Workload | Goose question |
 | --- | --- | --- |
@@ -43,7 +45,7 @@ equivalence or an exhaustive regex-engine qualification.
 
 ## ECS: dense components, stable logical IDs
 
-[`world.goose`](../../tools/experiments/workloads/world.goose) has a bounded entity
+[`world.goose`](../../samples/arena/world.goose) has a bounded entity
 table and Position, Velocity and Health stores. Each component uses dense
 structure-of-arrays values plus a sparse slot-to-row map. Velocity is optional:
 movement traverses its dense rows and locates Position through the sparse map.
@@ -82,7 +84,8 @@ without changing the remaining entities.
 ## Server: bounded progress per connection
 
 [`server.goose`](../../tools/experiments/workloads/server.goose) owns one World,
-one compiled command Regex and three connection records. Each record has a
+one compiled command Regex and a reusable Service configured for three active
+connections. The Service reserves 16 records regardless of that setting. Each has a
 generation, 256-byte input buffer, 2048-byte output buffer and sent offset.
 It processes at most one complete frame per connection per polling pass and
 reserves room for the largest response before reading/consuming more input.
@@ -93,9 +96,9 @@ suffix intact for a later pass. Counters distinguish partial writes, native
 would-block, admission pauses and reclaimed prefix bytes.
 A blocked connection therefore does not prevent another connection's PING.
 Responses stay in FIFO order on each connection; actions across connections
-are serialized by the owner's polling order.
+are serialized by the owner's polling order, with a rotating first peer.
 
-The native [transport](../../tools/experiments/workloads/server_transport.c)
+The native [transport](../../native/net/tcp/tcp.c)
 binds IPv4 loopback on an ephemeral port and exposes init/listen/accept/receive/
 send/close/shutdown. Would-block and partial progress return to Goose. It contains
 no game state, request parser, framing buffer or response queue. A fourth peer
@@ -125,7 +128,8 @@ and an unterminated full input buffer close only that connection. Close discards
 at most 256 additional unread bytes before releasing the socket, which preserves
 the error response for the tested small overflow; arbitrary excessive input can
 still cause TCP reset. Shutdown discards unprocessed input while draining already
-queued output. A 60-second process deadline bounds this experiment's lifetime.
+queued output. A one-second drain deadline bounds stalled peers; a 60-second
+process deadline bounds this experiment's lifetime.
 
 The [network fixture](../../tests/server_experiment_fixture.py) checks fragmented
 commands, coalesced pipelines, CRLF, incomplete frames, overflow/invalid numbers,
@@ -158,7 +162,7 @@ python tools/workload_qualification.py --build build-core --output local/workloa
 ```
 
 The [qualification runner](../../tools/workload_qualification.py) snapshots
-workload/model/runner sources, stdlib and transport C, and records compiler,
+workload/library/sample/model/runner sources, stdlib and transport C, and records compiler,
 source, generated C and executable hashes. It uses one selected compatible
 compiler at Goose O0/O1/O2, with native C O2. Existing output directories are
 refused; incomplete records survive failure. `--targets`, `--levels` and
@@ -172,10 +176,10 @@ The initial Windows/MSVC qualification on 2026-10-11 passed all nine target/leve
 | ECS game | 2400 frames and 18872 complete live-entity rows |
 | Server | 7 connection lifetimes, 103 requests, 112 checked replies, and zero remaining native sockets |
 
-The full GUI-free build with tools enabled also passed all 23 CTest checks.
+At that stage, the full GUI-free build with tools enabled passed all 23 CTest checks.
 
 Across the three levels this is 4938 regex inputs, 30660 captures, 7200 game
-frames, 56616 entity rows and 309 network requests. The fixed generated World is
+frames, 56616 entity rows and 309 network requests. The original fixed generated World was
 7298 bytes; each Connection is 2334 bytes. These layout measurements exclude
 compiled regex tables, temporary/owned outputs, native socket buffers and
 runtime/OS allocations. They do not establish total process memory or throughput.
@@ -186,7 +190,7 @@ ignored `local/references/workloads/development-run/`.
 The follow-up `backpressure-run/` qualifies the changed ECS/server targets at
 O0/O1/O2 without repeating the unchanged regex workload. All six target/level
 runs passed. Each ECS run adds the generation-retirement and integer-minimum
-boundary cases. Each server run now checks two processes: 9 connection lifetimes,
+boundary cases. Each server run at that stage checked two processes: 9 connection lifetimes,
 619 requests and 630 replies, including 512 responses after actual kernel
 backpressure. Across three levels, this is 27 connection lifetimes and 1857
 requests; every process returns to zero native sockets. The protocol pass
@@ -194,3 +198,14 @@ reclaimed 3200 sent bytes in 100 compactions, with a 1976-byte peak output buffe
 These counters establish exercised behavior, not a throughput improvement.
 Fixed World/Connection layouts remain 7298/2334 bytes. The record excludes
 Python bytecode caches from source hashes.
+
+The subsequent `reusable-run/` qualifies the migrated ECS/server entry points
+at O0/O1/O2 against the same compiler. All six runs passed. Each server run
+checks 9 connection lifetimes, 623 requests and 634 replies, including the same
+512 responses after actual kernel backpressure. Four additional malformed lines
+cover doubled CR, an oversized command name, a tab and empty input. Across levels,
+27 connections, 1869 requests and 1902 replies return to zero native sockets.
+The current generated World/Connection layouts are 7310/2350 bytes; the Service
+reserves 16 connection records. These measurements still exclude dynamic replies,
+regex tables and runtime/native/OS allocations. The GUI-free build with tools
+passed 27 CTest checks; the optional arena graphics fixture also passed.

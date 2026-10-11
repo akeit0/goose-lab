@@ -16,6 +16,8 @@ Go and Zig.
 | Data | [JSON parsing/writing](data/json.md), [JSON files](data/json-files.md), [field editing](data/json-edit.md) |
 | Buffers | [Indexed byte storage](buffer/indexed.md): independent lifetimes and direct lookup; [slot arena](buffer/slot-arena.md): variable values, hole reuse and deferred compaction |
 | Documents | [Persistent document Store](document/store.md): multiple explicit-owner documents, shared Undo/saved roots, collection and equal-history comparison |
+| ECS | [Entity identity and dense components](ecs.md): generation IDs, sparse maps, typed stores and SoA composition |
+| TCP | [Line server and client](io/line-server.md): independent connections, bounded framing, backpressure and drain deadlines |
 | I/O | [Event loop and processes](io/io-core.md), [cancellation](io/cancellation.md), [independent HTTP clients](io/http-clients.md), [bounded streams/search clients](io/streams.md), [HTTP/search composition](io/mixed-services.md), [process stdin/framing](io/process-input.md) |
 | Files | [Asynchronous reads/listings](io/async-files.md), [atomic saves](io/atomic-save.md), [watching/reconciliation](io/file-watching.md) |
 | UI authoring | [Composition](ui/ui-composition.md), [Clay layout](ui/layout.md), [scrolling/lists](ui/scrolling.md), [tree view](ui/tree-view.md), [commands/modals](ui/command-palette.md) |
@@ -29,6 +31,7 @@ Go and Zig.
 - [Git viewer](apps/git-viewer.md), [history/objects](apps/git-history.md) and [file search](apps/file-search.md).
 - [API Browser](apps/api-browser.md): HTTP, local snapshots and asynchronous UI results.
 - [Task Inbox](apps/task-inbox.md): stable records, local storage and failure handling.
+- [Local arena](apps/arena.md): an authoritative ECS game server, CLI peers and an optional graphical client.
 
 ## Development
 

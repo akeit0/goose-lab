@@ -58,8 +58,8 @@ class Client:
 
 
 def response(world, line):
-    text = line.rstrip(b"\r\n")
-    if re.fullmatch(rb"[A-Z]+(?: -?[0-9]{1,19}){0,7}", text) is None:
+    text = line.removesuffix(b"\n").removesuffix(b"\r")
+    if re.fullmatch(rb"[A-Z]{1,16}(?: -?[0-9]{1,19}){0,7}", text) is None:
         return b"ERR syntax\n"
     fields = text.split(b" "); command = fields[0]; values = list(map(int, fields[1:]))
     if any(not -(1 << 63) <= v < (1 << 63) for v in values):
@@ -171,7 +171,7 @@ def run_protocol(binary):
         e.send(b"PING\nPING\nSPAWN 1 0 0"); requests += 2; e.socket.shutdown(socket.SHUT_WR)
         expect(e, b"PONG\n"); expect(e, b"PONG\n"); expect(e, b"ERR truncated\n"); e.eof()
         f = connect(port, 2, 3)
-        for bad in (b"\x00PING\n", b"PING 1\n", b"STEP 0\n", b"SPAWN 9999999999999999999 0 0 0 1 1 1\n",
+        for bad in (b"\x00PING\n", b"PING\r\r\n", b"ABCDEFGHIJKLMNOPQ\n", b"PING\t\n", b"\n", b"PING 1\n", b"STEP 0\n", b"SPAWN 9999999999999999999 0 0 0 1 1 1\n",
                     b"SPAWN -9223372036854775808 0 0 0 1 1 1\n", b"SPAWN 0 0 9 0 1 1 1\n"):
             request(f, bad)
         request(f, b"STATS\n")

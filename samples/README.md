@@ -38,6 +38,7 @@ files. Build samples without contract tests with `-DGOOSE_LAB_BUILD_TESTS=OFF`.
 | API Browser | HTTP requests, asynchronous results, JSON records and explicit snapshot saving | [README](api_browser/README.md) |
 | Task Inbox | Editable records, persistent storage and failed-save recovery | [README](task_inbox/README.md) |
 | Component Gallery | Controls, state changes and responsive Clay layout | [README](component_gallery/README.md) |
+| Arena | Authoritative ECS game server, CLI peers and optional graphics | [README](arena/README.md) |
 | CLI samples | HTTP, process streams, files, JSON, Git and search without a GUI | [README](cli/README.md) |
 | Data | Unicode/emoji input for the editor | [emoji.txt](data/emoji.txt) |
 
@@ -49,7 +50,7 @@ cases belong to tests; manual profiling belongs to `tools/ui` and is built with
 
 ## Code boundaries
 
-Each GUI directory owns its entry point, model and controller. Add `samples` as
+Each application directory owns its entry point, model and controller. Add `samples` as
 a module root when importing these application modules; it is not a library root.
 Libraries live under `lib/lab` and native adapters under `native`. Application
 navigation, screen composition and task/API domain models stay in their sample.
