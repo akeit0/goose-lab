@@ -38,6 +38,14 @@ chunked and pooled-tree representations before attributing these costs to a
 missing move facility or requesting independent dynamic stacks. Pool reuse
 does not itself release committed memory to the OS.
 
+The [persistent document Store](document/store.md) now implements this shared-tree
+alternative with an explicit owner, independent current/saved/Undo/Redo roots and
+collection across every live document. Equal 32-entry history traces at 3/16/64
+documents avoid whole-text edit/save copies and reduce arena lengths. They retain
+approximately 1 MiB fixed document/history descriptors and pay collection and
+node-prefix text relocation. These are library representation costs to investigate
+before proposing a language/runtime change; Workbench adoption remains separate.
+
 The [indexed byte-buffer library](buffer/indexed.md) now supplies an explicit
 caller-owned Store with fixed chunk directories and one grow-only byte arena.
 Library freelists keep independently lived buffers in that owner without exposing

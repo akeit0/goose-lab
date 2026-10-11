@@ -89,6 +89,9 @@ editing/search/Git workflow and platform shortcuts.
 With manual tools enabled, `document_profile` and `tools/document_experiment.py`
 provide [GUI-free independent-document experiments](docs/experiments/independent-documents.md),
 including 3/16/64 resident buffers and recorded snapshot/Piece Tree comparisons.
+`document_store_profile` and `tools/document_store_experiment.py` compare snapshots
+with the [shared persistent document Store](docs/document/store.md), using equal
+history limits and 3/16/64 independently lived documents.
 
 Windows uses installed Segoe UI, Consolas and available Japanese/symbol/emoji
 fallbacks. Linux probes installed DejaVu/Liberation/Noto fonts; macOS uses installed Arial

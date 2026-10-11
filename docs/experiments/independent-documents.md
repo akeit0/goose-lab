@@ -1,10 +1,14 @@
 # Independent document experiment
 
-This is a GUI-free research baseline, implemented in
+This is the GUI-free full-snapshot research baseline, implemented in
 [`tools/experiments/pool_document.goose`](../../tools/experiments/pool_document.goose).
 It tests whether existing Goose slice pools can retain independently editable
 documents, selections, Undo/Redo and saved state, and measures the cost of that
 representation. Workbench still uses its existing single-document editor.
+The newer [persistent document Store comparison](../document/store.md) supplies
+an explicit-owner shared Piece Tree for 3/16/64 documents with equal history limits.
+Use that comparison for multi-document representation conclusions; the older
+one-document cases below retain their historical history-policy difference.
 
 ## Reproduce
 
@@ -131,9 +135,9 @@ Runtime reservation/commit counters are not available in this experiment.
 
 Full snapshots make even a one-byte edit copy the complete new text. The growing
 range-preflight cost under budget pressure is a library implementation choice,
-not proof that Goose's runtime pool itself scales poorly. The next representation comparisons should
-be chunked storage and a pooled Piece Tree, using this same correctness oracle
-and reporting which costs each removes. Only measured remaining problems justify
+not proof that Goose's runtime pool itself scales poorly. The indexed buffer and
+shared persistent document Store now supply the chunk/addressing and edit-sharing
+comparisons, with independent models and separate work counters. Only measured remaining problems justify
 runtime allocation/observability or language proposals. No upstream change is
 required to run this baseline.
 

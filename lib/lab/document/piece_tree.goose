@@ -7,24 +7,28 @@ let OK: i32 = 0; let INVALID: i32 = 1; let LIMIT: i32 = 2;
 let LEAF: i64 = 4096; let MAX_NODES: i64 = 32768;
 struct Limits { bytes: i64 = 2097152, store: i64 = 8388608, nodes: i64 = MAX_NODES }
 struct Node { left: i64 = -1, right: i64 = -1, start: i64 = 0, bytes: i64 = 0, lines: i64 = 0, height: i64 = 1, leaves: i64 = 1 }
+struct Metrics { inserted: i64 = 0, collected_bytes: i64 = 0, growth_moved: i64 = 0, node_writes: i64 = 0, collections: i64 = 0, scanned_nodes: i64 = 0 }
 // One resizable tail: seven-word node records followed by eight-byte text words.
 // Child IDs use zero for absent, so all stored node fields are unsigned.
-struct Buffer { code: i32 = OK, root: i64 = -1, limits: Limits = Limits {}, nodes: i64 = 0, capacity: i64 = 0, stored: i64 = 0, arena: u64[>..<] = [] }
+struct Buffer { code: i32 = OK, root: i64 = -1, limits: Limits = Limits {}, nodes: i64 = 0, capacity: i64 = 0, stored: i64 = 0, metrics: Metrics = Metrics {}, arena: u64[>..<] = [] }
 fn get_node(b: const Buffer&, id: i64) -> Node {
     assert(id >= 0 && id < b.nodes); let i = id * 7;
     Node { (b.arena[i] as i64)-1, (b.arena[i+1] as i64)-1, b.arena[i+2] as i64, b.arena[i+3] as i64, b.arena[i+4] as i64, b.arena[i+5] as i64, b.arena[i+6] as i64 }
 }
 fn put(b: Buffer&, id: i64, n: Node) {
+    b.metrics.node_writes++;
     let i = id * 7; b.arena[i]=(n.left+1) as u64; b.arena[i+1]=(n.right+1) as u64; b.arena[i+2]=n.start as u64; b.arena[i+3]=n.bytes as u64; b.arena[i+4]=n.lines as u64; b.arena[i+5]=n.height as u64; b.arena[i+6]=n.leaves as u64;
 }
 fn grow_nodes(b: Buffer&) {
     if b.nodes < b.capacity { return; }
     let capacity = min(b.limits.nodes, max(8, b.capacity * 2)); let words = (b.stored + 7) / 8; let old = b.capacity * 7; let next = capacity * 7;
     b.arena.resize(next + words, 0); var i = words; while i > 0 { i--; b.arena[next+i] = b.arena[old+i]; } b.capacity = capacity;
+    b.metrics.growth_moved += words * 8;
 }
 fn push_node(b: Buffer&, n: Node) { grow_nodes(b); put(b, b.nodes, n); b.nodes++; }
 fn source_byte(b: const Buffer&, at: i64) -> u8 { assert(at >= 0 && at < b.stored); ((b.arena[b.capacity*7+at/8] >> ((at%8)*8)) & 255) as u8 }
 fn append_text(b: Buffer&, text: const u8[:]) {
+    b.metrics.inserted += text.len;
     b.arena.resize(b.capacity*7+(b.stored+text.len+7)/8, 0);
     for byte in text { let i = b.capacity*7+b.stored/8; let shift = (b.stored%8)*8; b.arena[i] = (b.arena[i] & ~((255 as u64) << shift)) | ((byte as u64) << shift); b.stored++; }
 }
@@ -106,6 +110,17 @@ fn read_at(b: const Buffer&, root: i64, start: i64, end: i64) -> u8[>..] {
     assert(start >= 0 && end >= start && end <= size(b, root)); var out: u8[>..] = []; append_range(b, root, start, end, out); out
 }
 fn read(b: const Buffer&, start: i64, end: i64) -> u8[>..] { read_at(b, b.root, start, end) }
+// Compare borrowed input without materializing the removed range for a no-op.
+recursive fn matches_range(b: const Buffer&, root: i64, start: i64, end: i64, bytes: const u8[:]) -> bool {
+    assert(start >= 0 && end >= start && end <= size(b, root));
+    if end - start != bytes.len { return false; } if start == end { return true; }
+    let n = get_node(b, root);
+    if n.left < 0 { for i in bytes.len { if source_byte(b, n.start + start + i) != bytes[i] { return false; } } return true; }
+    let length = size(b, n.left); let left = max(0, min(end, length) - start);
+    if left > 0 && !matches_range(b, n.left, start, min(end, length), bytes[0..left]) { return false; }
+    if end > length && !matches_range(b, n.right, max(0, start - length), end - length, bytes[left..bytes.len]) { return false; }
+    true
+}
 fn reserve(b: const Buffer&, insertion: i64) -> i64 { 128 * (height(b, b.root) + 1) + 2 * ((insertion + LEAF - 4) / (LEAF - 3)) + 16 }
 // Validation/preflight precede every append or node change; errors preserve text.
 fn replace(b: Buffer&, start: i64, end: i64, bytes: const u8[:]) -> i32 {
@@ -133,6 +148,7 @@ fn line_span(b: const Buffer&, line: i64) -> lab_text_line_index::Span {
 }
 // All retained roots must be supplied. Collection remaps their numeric IDs.
 fn collect(b: Buffer&, roots: i64[:]) {
+    b.metrics.collections++; b.metrics.scanned_nodes += b.nodes;
     var marked: bool[>..] = []; marked.resize(b.nodes, false); var mapping: i64[>..] = []; mapping.resize(b.nodes, -1);
     fn mark(root: i64) {
         var stack: i64[..64] = []; if root >= 0 { stack.push(root); }
@@ -174,5 +190,5 @@ fn collect_bytes(b: Buffer&) {
         assert(first<ranges.len && ranges[first].start<=n.start && n.start+n.bytes<=ranges[first].end);
         n.start=ranges[first].next+n.start-ranges[first].start; put(b,i,n);
     }
-    b.stored=next; b.arena.resize(b.capacity*7+(next+7)/8);
+    b.metrics.collected_bytes += next; b.stored=next; b.arena.resize(b.capacity*7+(next+7)/8);
 }
