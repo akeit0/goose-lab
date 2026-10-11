@@ -101,6 +101,11 @@ fields, length headers and native padding. Live/peak chunk slots remain in the
 CSV; the reserved entry counts are separate manifest metadata. Direct lookup
 removes chain traversal by paying that fixed metadata cost, including at small
 buffer counts. Both binaries remain headless and need no native lab services.
+The separate [library qualification](../buffer/indexed.md#validation) measures
+the full fixed Store layout as 148861 bytes on Windows x64/MSVC, including fields,
+length headers and the tail header. It also runs the default 4096-chunk/16 MiB
+arena to saturation and 810000 flat-model operations at three optimization levels.
+These checks extend correctness coverage without changing this trace's timers.
 
 The table bound and 128 MiB pessimistic allocation envelope are experiment
 policies. The runner checks them before creating a record or starting a program;

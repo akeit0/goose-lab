@@ -38,7 +38,7 @@ still requires a working GPU/backend; it is not a software renderer.
 | Check sources | Main coverage |
 | --- | --- |
 | [Utility contract](../tests/utils_contract.goose) | Piece-tree edits against a flat-string oracle, live-root collection, Unicode boundaries and pure utilities |
-| [Indexed buffer contract](../tests/indexed_buffer_contract.goose) | 3/16/64 independent byte buffers, 900-operation flat-array oracle per count, scoped generation IDs, two Stores, whole-request quota refusal and owned exports |
+| [Indexed buffer contract](../tests/indexed_buffer_contract.goose) | 3/16/64 independent buffers, flat-array oracle, multi-byte writes, stale IDs, two Stores, whole-request refusal, owned exports and 4096-chunk saturation/reuse |
 | [Independent document contract](../tests/multi_document_contract.goose) | 3/16/64 pooled documents, independent Undo/selection/saved state, actual save success/failure, stale generations, budgets and 700-operation model comparison |
 | [HTTP fixture](../tests/http_fixture.py), [native cancellation](../tests/cancel_contract.c) | TLS/redirect/byte limits, cancellation and handle lifetimes |
 | [JSON corpus](../tests/json_corpus.py) | Independent decoding, round trips and malformed/bounded inputs |
@@ -46,6 +46,12 @@ still requires a working GPU/backend; it is not a software renderer.
 | [Git/file fixture](../tests/git_fixture.py) | Process streams, files/watches, atomic-save conflicts, Git history, search and editor interactions |
 | [UI composition](../tests/view_contract.goose), [text/rendering](../tests/modern_contract.goose) | Ordered actions, focus, clipping, glyph geometry, unchanged GPU frames and cleanup |
 | [API fixture](../tests/api_fixture.py), [task fixture](../tests/task_fixture.py) | Persistence, failed-load/save recovery and asynchronous result adoption |
+
+Long byte-buffer qualification uses `tools/indexed_buffer_qualification.py`,
+separately from the fast CTest contract. Its default is 810000 model operations
+across three seeds, 3/16/64 buffers and Goose `-O0/-O1/-O2`, plus full default-arena
+saturation and reuse in every process. It records one selected toolchain and
+measures its generated Store layout; see the [buffer guide](buffer/indexed.md).
 
 The stricter joined-emoji check needs the optional reference font:
 

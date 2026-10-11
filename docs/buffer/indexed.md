@@ -69,6 +69,14 @@ live payload chunks, `high_water` counts retained arena bytes, and `peak_chunks`
 counts maximum live chunk slots; none includes that fixed metadata. Retained
 arena/free slots are not evidence of memory returned to the OS.
 
+The generated C layout on Windows x64/MSVC has `sizeof(Store) == 148861`,
+including scalar fields, array lengths and the 16-byte tail header. The tail
+header starts at byte 148845; the buffers and freelist fields occupy 132289 and
+16384 bytes respectively. Goose's generated layout is packed. This is the fixed
+representation size, not runtime allocation granularity, committed pages or RSS.
+The qualification runner measures it for each optimization level instead of
+assuming that raw directory entry bytes are the whole Store cost.
+
 Appending, overwriting and exporting a range walk chunk spans; they do not scan
 a chain from its start for every byte. Scalar reads index directly. Owned export
 still copies every returned byte. The library has no insert/delete splice,
@@ -83,12 +91,33 @@ instead of introducing a language or allocator change.
 ## Validation
 
 The [contract](../../tests/indexed_buffer_contract.goose) compares 900 deterministic
-append/write/truncate/close/reopen operations at each of 3/16/64 buffers against
-independent flat arrays. It checks boundary-crossing payloads, stale IDs, owned
-exports, two independent Stores, aggregate chunk and per-buffer quotas, refusal
-without partial writes, and full cleanup/reuse. It runs as `indexed_buffer_contract`
-in the main core/GUI configurations. The same source is also checked at Goose
-`-O0/-O1/-O2` during library qualification.
+append/multi-byte-write/truncate/close/reopen/refusal operations at each of 3/16/64
+buffers against independent flat arrays. It checks boundary-crossing payloads,
+stale IDs, owned exports, two independent Stores and whole-request refusal with
+all mutable counters unchanged. Periodic accounting checks derive logical bytes,
+live chunks and capacity from the flat arrays. It opens all 64 IDs and fills eight
+buffers to their 512-entry/2 MiB limits, exhausting all 4096 default chunks. Sixty-four
+non-LIFO close/reopen and truncate/refill cycles preserve the 16 MiB high-water,
+survivors and a previously exported 2 MiB copy. The contract runs in the main
+core/GUI configurations; their registered check counts are unchanged.
+
+For longer qualification, use the same compatible fork once:
+
+```text
+python tools/indexed_buffer_qualification.py --build build --output local/references/indexed-buffer/boundary-library-run
+```
+
+The [runner](../../tools/indexed_buffer_qualification.py) builds source snapshots
+at Goose `-O0/-O1/-O2`, keeping native C optimization at level 2. Each level runs
+three seeds with 30000 operations per buffer count: 810000 model operations total.
+It independently calculates expected close/reopen and refusal counts in Python.
+All nine Windows/MSVC runs passed, including the maximum-capacity test in each
+process. The ignored record above includes revisions/diffs, source snapshots and
+hashes, compiler/binary hashes, raw output, operation coverage and generated
+layout measurements. Failure leaves an incomplete manifest and logs; existing
+output directories are refused. `--rounds`, repeated `--seed` and `--level` allow
+focused reproductions. This is bounded operation-count qualification, not a claim
+about hours of uptime or OS memory stability.
 
 The [storage experiment](../experiments/buffer-storage.md) compares the library
 with geometric runs and linked pool chunks on equal append/read/lifetime traces.
